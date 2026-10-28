@@ -1,0 +1,19 @@
+MINI RACING V18 — Classements partagés
+
+1. Le jeu HTML fonctionne seul. La jauge de dégâts est corrigée.
+2. Pour activer le classement partagé, créer un compte Cloudflare et une base D1 nommée mini-racing-db.
+3. Dans la console D1, exécuter mini_racing_schema.sql.
+4. Créer un Cloudflare Worker (nom suggéré mini-racing-scores), coller mini_racing_worker.js.
+5. Dans Paramètres du Worker > Bindings, ajouter une liaison D1 avec le nom exact DB vers mini-racing-db.
+6. Déployer le Worker. Tester son adresse /leaderboard : elle doit afficher un JSON.
+7. Ouvrir mini_racing_v18_index.html et renseigner GLOBAL_API_URL avec l'adresse du Worker, sans barre oblique finale.
+   Exemple : const GLOBAL_API_URL='https://mini-racing-scores.votre-compte.workers.dev';
+8. Renommer le fichier HTML en index.html et le publier dans le dépôt GitHub Pages.
+9. Tous les utilisateurs qui ouvrent le jeu avec la même URL de Worker partagent les classements.
+
+IMPORTANT : aucun classement partagé ne fonctionne avant les étapes 2 à 7.
+Le classement fonctionne par identifiant conservé dans le navigateur : effacer les données du navigateur change l'identifiant.
+Les données envoyées sont publiques (pseudo, équipe, temps, points). Éviter les noms personnels.
+Il n'y a pas encore de comptes authentifiés ni d'anti-triche robuste. Un joueur technique pourrait falsifier ses scores.
+Les statistiques d'équipe agrègent les résultats publiés par les joueurs humains, pas ceux des IA.
+Le tableau des meilleures courses mélange des distances différentes ; la distance est indiquée à l'écran.

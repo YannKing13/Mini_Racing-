@@ -61,11 +61,11 @@ function pitDrive(c,i,dt){let stop=pitLane.stops[roster[i][3]];if(!c.pitServiced
 function pitService(c,i){if(c.pitTime>0)return;c.serviceTasks=pitTasks(c,i);c.pitTime=serviceDuration(c.serviceTasks);c.speed=0}
 // V9: five deliberately different, longer circuits (world units).
 const tracks=[
- ['JARDIN',[[0,0],[450,-95],[970,-40],[1320,190],[1430,570],[1190,910],[760,980],[440,790],[70,910],[-360,730],[-670,360],[-540,10],[-230,-140]],112,'#367849'],
- ['CUISINE',[[0,0],[340,-290],[840,-370],[1290,-180],[1460,190],[1270,490],[930,520],[770,230],[440,210],[230,620],[-170,890],[-650,740],[-810,310],[-560,-130]],100,'#b68d60'],
- ['GARAGE',[[0,0],[650,-60],[1240,10],[1600,320],[1510,780],[1090,970],[750,750],[510,350],[220,480],[-100,1010],[-570,1090],[-940,740],[-970,260],[-610,-100]],95,'#666b72'],
- ['PLAGE',[[0,0],[460,-270],[990,-400],[1530,-210],[1770,180],[1590,610],[1130,800],[650,780],[230,1070],[-260,1230],[-760,990],[-1090,580],[-940,120],[-510,-230]],120,'#e1c98b'],
- ['BUREAU',[[0,0],[490,-70],[840,180],[1060,530],[910,890],[550,1110],[100,990],[-260,640],[-610,760],[-1040,570],[-1200,190],[-990,-180],[-570,-310],[-200,-130]],90,'#967b65']];
+ ['JAPON - SUZUKA',[[0,0],[450,-95],[970,-40],[1320,190],[1430,570],[1190,910],[760,980],[440,790],[70,910],[-360,730],[-670,360],[-540,10],[-230,-140]],112,'#367849'],
+ ['USA - AUSTIN',[[0,0],[340,-290],[840,-370],[1290,-180],[1460,190],[1270,490],[930,520],[770,230],[440,210],[230,620],[-170,890],[-650,740],[-810,310],[-560,-130]],100,'#b68d60'],
+ ['FRANCE - LE CASTELLET',[[0,0],[650,-60],[1240,10],[1600,320],[1510,780],[1090,970],[750,750],[510,350],[220,480],[-100,1010],[-570,1090],[-940,740],[-970,260],[-610,-100]],95,'#666b72'],
+ ['ITALIE - MONZA',[[0,0],[460,-270],[990,-400],[1530,-210],[1770,180],[1590,610],[1130,800],[650,780],[230,1070],[-260,1230],[-760,990],[-1090,580],[-940,120],[-510,-230]],120,'#e1c98b'],
+ ['BELGIQUE - SPA',[[0,0],[490,-70],[840,180],[1060,530],[910,890],[550,1110],[100,990],[-260,640],[-610,760],[-1040,570],[-1200,190],[-990,-180],[-570,-310],[-200,-130]],90,'#967b65']];
 const hypot=Math.hypot,clamp=(x,a,b)=>Math.max(a,Math.min(b,x)),mod=(a,b)=>(a%b+b)%b;
 function smooth(arr,n=3){let p=arr.map(a=>[...a]);for(let z=0;z<n;z++){let q=[];for(let i=0;i<p.length;i++){let a=p[i],b=p[(i+1)%p.length];q.push([.75*a[0]+.25*b[0],.75*a[1]+.25*b[1]],[.25*a[0]+.75*b[0],.25*a[1]+.75*b[1]])}p=q}return p}
 function rng(seed){return()=>{seed=(seed*1664525+1013904223)>>>0;return seed/4294967296}}
@@ -78,7 +78,7 @@ function randomBonusPosition(exclude=null){
   while(idx<segments.length-1&&cumulative[idx+1]<progress)idx++;
   let t=clamp((progress-cumulative[idx])/segments[idx],0,1),a=pts[idx],b=pts[(idx+1)%pts.length];
   let dx=(b[0]-a[0])/segments[idx],dy=(b[1]-a[1])/segments[idx];
-  let side=(Math.random()*2-1)*roadWidth*.29;
+  let side=(Math.random()*2-1)*roadWidth*.36;
   let x=a[0]+(b[0]-a[0])*t-dy*side,y=a[1]+(b[1]-a[1])*t+dx*side;
   if(obstacles.some(o=>hypot(x-o.x,y-o.y)<55))continue;
   if(cars.some(c=>!c.done&&hypot(x-c.x,y-c.y)<75))continue;
@@ -94,7 +94,7 @@ function crossedGate(c,oldX,oldY){
  const k=c.nextGate||0,p=gates[k],dx=Math.cos(p.angle),dy=Math.sin(p.angle);
  const before=(oldX-p.x)*dx+(oldY-p.y)*dy,after=(c.x-p.x)*dx+(c.y-p.y)*dy;
  const lateral=Math.abs((c.x-p.x)*(-dy)+(c.y-p.y)*dx);
- if(before>=0||after<0||lateral>roadWidth*.53||after-before>95)return false;
+ if(before>=0||after<0||lateral>roadWidth*.55||after-before>95)return false;
  c.gatesPassed=(c.gatesPassed||0)+1;c.nextGate=(k+1)%12;
  if(k===0){c.lap++;const t=elapsed-(c.lapStarted||0);
    if(c.lapStarted>0&&t>2){c.lastLapTime=t;if(c===cars[0]){lastLap=t;bestLap=Math.min(bestLap,t)}}
@@ -105,24 +105,23 @@ function crossedGate(c,oldX,oldY){
  return false;
 }
 function updateRaceDistance(c){
- const loc=locate(c.x,c.y);
- // La position dans le classement est bornée par les portiques effectivement validés.
- let pr=loc.progress,gate=c.nextGate||0,prev=mod(gate-1,12),lo=prev*total/12,hi=(prev+1)*total/12;
- let section=pr;if(gate===0&&c.gatesPassed===0)section=pr-total;
- else if(gate===0&&pr<total/12)section=pr+total;
- else if(gate!==0&&pr<lo-total*.5)section=pr+total;
- section=clamp(section,lo,hi);
- // Compteur de secteurs validés, sans téléportation ni tour fantôme.
- const base=c.gatesPassed||0;
- const frac=clamp((section-lo)/(total/12),0,1);
- c.raceDistance=state==='qual'?(base+frac)*total/12:(base===0?Math.min(0,pr-total):(base-1+frac)*total/12);
+ const loc=locate(c.x,c.y),previous=c.lastTrackProgress??loc.progress;
+ let delta=loc.progress-previous;
+ if(delta>total/2)delta-=total;
+ if(delta< -total/2)delta+=total;
+ // Le classement utilise la progression physique continue, indépendamment des portiques.
+ // Une projection aberrante dans un virage serré ne peut pas offrir un tour gratuit.
+ const maxDelta=Math.max(28,Math.abs(c.speed||0)*.09+25);
+ if(Math.abs(delta)<=maxDelta)c.odometer=(c.odometer||0)+delta;
+ c.lastTrackProgress=loc.progress;
+ c.raceDistance=c.odometer||0;
  c.progress=loc.progress;
 }
-function start(mode='race'){session=mode;let def=tracks[track];roadWidth=def[2];let shape=def[1].map(p=>[p[0]*1.32,p[1]*1.32]);shape[0]=[0,0];shape[1]=[620,0];shape[shape.length-1]=[-620,0];pts=smooth(shape,2);segments=[];cumulative=[];total=0;for(let i=0;i<pts.length;i++){cumulative.push(total);let a=pts[i],b=pts[(i+1)%pts.length],len=hypot(b[0]-a[0],b[1]-a[1]);segments.push(len);total+=len}createPit();buildGates();let a=pts[0],b=pts[1],dx=(b[0]-a[0])/segments[0],dy=(b[1]-a[1])/segments[0];cars=[];for(let i=0;i<10;i++){let slot=mode==='race'?gridOrder.indexOf(i):i;let row=Math.floor(slot/2),side=slot%2===0?-1:1;let offset=mode==='qual'&&i===0?0:42+row*75+(slot%2)*20;let lateral=mode==='qual'&&i===0?0:side*roadWidth*.20;
+function start(mode='race'){session=mode;let def=tracks[track];roadWidth=Math.max(168,def[2]*1.55);let shape=def[1].map(p=>[p[0]*1.32,p[1]*1.32]);shape[0]=[0,0];shape[1]=[620,0];shape[shape.length-1]=[-620,0];pts=smooth(shape,2);segments=[];cumulative=[];total=0;for(let i=0;i<pts.length;i++){cumulative.push(total);let a=pts[i],b=pts[(i+1)%pts.length],len=hypot(b[0]-a[0],b[1]-a[1]);segments.push(len);total+=len}createPit();buildGates();let a=pts[0],b=pts[1],dx=(b[0]-a[0])/segments[0],dy=(b[1]-a[1])/segments[0];cars=[];for(let i=0;i<10;i++){let slot=mode==='race'?gridOrder.indexOf(i):i;let row=Math.floor(slot/2),side=slot%2===0?-1:1;let offset=mode==='qual'&&i===0?0:42+row*75+(slot%2)*20;let lateral=mode==='qual'&&i===0?0:side*roadWidth*.25;
  // Position on the actual spline: the track bends before the fifth row.
  let pr=mod(total-offset,total),idx=0;while(idx<segments.length-1&&cumulative[idx+1]<pr)idx++;
  let u=(pr-cumulative[idx])/segments[idx],aa=pts[idx],bb=pts[(idx+1)%pts.length],vx=(bb[0]-aa[0])/segments[idx],vy=(bb[1]-aa[1])/segments[idx];
- let x=aa[0]+(bb[0]-aa[0])*u-vy*lateral,y=aa[1]+(bb[1]-aa[1])*u+vx*lateral;cars.push({x,y,angle:Math.atan2(vy,vx),speed:0,progress:locate(x,y).progress,lap:mode==='qual'?0:-1,finish:0,done:false,rank:i+1,boost:0,shield:0,trap:0,stuck:0,collisionGrace:0,aiLane:i===0?0:[-19,18,-9,11,-24,9,-13,23,-4][i-1],aiMood:i===0?0:[.98,1.015,1.00,1.025,.97,1.005,.985,1.035,.995][i-1],aiPass:0,fuel:100,tire:i===0?tireChoice:(weatherChoice>=2?3:1),tireWear:0,pitTime:0,pitCooldown:0,pitCount:0,requestedPit:false,inPit:false,pitProgress:0,pitServiced:false,damage:0,serviceTasks:null,lapStarted:0,lastLapTime:0,raceDistance:-offset,gatesPassed:0,nextGate:mode==='qual'?1:0,startOffset:mode==='qual'?0:offset,prevX:x,prevY:y})}obstacles=[];for(let i=0;i<pts.length;i+=19){let a=pts[i],b=pts[(i+1)%pts.length],dx=(b[0]-a[0])/segments[i],dy=(b[1]-a[1])/segments[i],side=(i%4?1:-1)*roadWidth*.24,x=a[0]+(b[0]-a[0])*.55-dy*side,y=a[1]+(b[1]-a[1])*.55+dx*side,pr=locate(x,y).progress;if(pr>190&&pr<total-75)obstacles.push({x,y,kind:i%38?'oil':'cone'})}pickups=[];for(let j=0;j<9;j++){let p=randomBonusPosition();if(p)pickups.push({...p,kind:['turbo','shield','trap'][j%3],respawn:0})}let rand=rng(300+track);decor=[];let minX=Math.min(...pts.map(p=>p[0]))-160,maxX=Math.max(...pts.map(p=>p[0]))+160,minY=Math.min(...pts.map(p=>p[1]))-160,maxY=Math.max(...pts.map(p=>p[1]))+160;for(let j=0;j<240;j++){let x=minX+rand()*(maxX-minX),y=minY+rand()*(maxY-minY);if(locate(x,y).dist>roadWidth*.85)decor.push({x,y,kind:Math.floor(rand()*4),size:9+rand()*17})}skids=[];particles=[];oilTraps=[];pitPanel=false;elapsed=0;lapClock=0;lastLap=0;bestLap=Infinity;lapStartAt=0;lastLapCount=0;weather=weatherChoice;weatherTimer=0;weatherAlert=0;planWeather(true);countdown=3.5;finishWait=-1;awarded=false;cam=[cars[0].x,cars[0].y];state=mode==='qual'?'qual':'race';if(mode==='qual'){qualTimes=[];qualStart=0;cars.forEach((c,i)=>{if(i>0)c.done=true});cars[0].progress=0;}clearControls()}
+ let x=aa[0]+(bb[0]-aa[0])*u-vy*lateral,y=aa[1]+(bb[1]-aa[1])*u+vx*lateral;cars.push({x,y,angle:Math.atan2(vy,vx),speed:0,progress:locate(x,y).progress,lap:mode==='qual'?0:-1,finish:0,done:false,rank:i+1,boost:0,shield:0,trap:0,stuck:0,collisionGrace:0,aiLane:i===0?0:[-19,18,-9,11,-24,9,-13,23,-4][i-1],aiMood:i===0?0:[.98,1.015,1.00,1.025,.97,1.005,.985,1.035,.995][i-1],aiPass:0,fuel:100,tire:i===0?tireChoice:(weatherChoice>=2?3:1),tireWear:0,pitTime:0,pitCooldown:0,pitCount:0,requestedPit:false,inPit:false,pitProgress:0,pitServiced:false,damage:0,serviceTasks:null,lapStarted:0,lastLapTime:0,raceDistance:-offset,gatesPassed:0,nextGate:mode==='qual'?1:0,startOffset:mode==='qual'?0:offset,odometer:mode==='qual'?0:-offset,lastTrackProgress:locate(x,y).progress,prevX:x,prevY:y})}obstacles=[];for(let i=0;i<pts.length;i+=19){let a=pts[i],b=pts[(i+1)%pts.length],dx=(b[0]-a[0])/segments[i],dy=(b[1]-a[1])/segments[i],side=(i%4?1:-1)*roadWidth*.34,x=a[0]+(b[0]-a[0])*.55-dy*side,y=a[1]+(b[1]-a[1])*.55+dx*side,pr=locate(x,y).progress;if(pr>190&&pr<total-75)obstacles.push({x,y,kind:i%38?'oil':'cone'})}pickups=[];for(let j=0;j<9;j++){let p=randomBonusPosition();if(p)pickups.push({...p,kind:['turbo','shield','trap'][j%3],respawn:0})}let rand=rng(300+track);decor=[];let minX=Math.min(...pts.map(p=>p[0]))-160,maxX=Math.max(...pts.map(p=>p[0]))+160,minY=Math.min(...pts.map(p=>p[1]))-160,maxY=Math.max(...pts.map(p=>p[1]))+160;for(let j=0;j<240;j++){let x=minX+rand()*(maxX-minX),y=minY+rand()*(maxY-minY);if(locate(x,y).dist>roadWidth*.85)decor.push({x,y,kind:Math.floor(rand()*4),size:9+rand()*17})}skids=[];particles=[];oilTraps=[];pitPanel=false;elapsed=0;lapClock=0;lastLap=0;bestLap=Infinity;lapStartAt=0;lastLapCount=0;weather=weatherChoice;weatherTimer=0;weatherAlert=0;planWeather(true);countdown=3.5;finishWait=-1;awarded=false;cam=[cars[0].x,cars[0].y];state=mode==='qual'?'qual':'race';if(mode==='qual'){qualTimes=[];qualStart=0;cars.forEach((c,i)=>{if(i>0)c.done=true});cars[0].progress=0;}clearControls()}
 function newChamp(){champ=true;round=0;track=0;scores=Array(10).fill(0);beginQual()}
 function beginQual(){gridOrder=Array.from({length:10},(_,i)=>i);start('qual')}
 function endQual(){let best=qualTimes.length?Math.min(...qualTimes):999;
@@ -148,7 +147,7 @@ function award(){if(awarded)return;awarded=true;if(champ){let rank=order();point
 function step(dt){if(state!=='race'&&state!=='qual')return;if(pitPanel&&state==='race')return;countdown-=dt;if(countdown>0)return;elapsed+=dt;if(state==='qual'&&qualStart===0)qualStart=elapsed;weatherTimer+=dt;weatherAlert=Math.max(0,weatherAlert-dt);if(state==='race'&&weatherWillChange&&weatherTimer>=weatherChangeAt){weather=forecast;weatherAlert=7;planWeather(false)}for(let c of cars){c.boost=Math.max(0,c.boost-dt);c.shield=Math.max(0,c.shield-dt);c.trap=Math.max(0,c.trap-dt);c.collisionGrace=Math.max(0,c.collisionGrace-dt);c.bumpX=(c.bumpX||0)*Math.exp(-4*dt);c.bumpY=(c.bumpY||0)*Math.exp(-4*dt);c.hitCooldown=Math.max(0,(c.hitCooldown||0)-dt);c.pitCooldown=Math.max(0,c.pitCooldown-dt)}oilTraps=oilTraps.filter(o=>(o.life-=dt)>0);for(let p of pickups){if(p.respawn>0){p.respawn=Math.max(0,p.respawn-dt);if(p.respawn===0){let next=randomBonusPosition(p);if(next){p.x=next.x;p.y=next.y}else p.respawn=1}}}skids=skids.filter(s=>(s.t-=dt)>0);particles=particles.filter(p=>(p.life-=dt)>0);for(let p of particles){p.x+=p.vx*dt;p.y+=p.vy*dt;p.vx*=Math.exp(-3*dt);p.vy*=Math.exp(-3*dt)}
 for(let i=0;i<10;i++){let c=cars[i];if(c.done)continue;let at=locate(c.x,c.y),steer=0,gas=1,maxSpeed=265;
  if(state==='race'&&!c.inPit&&c.requestedPit&&c.pitCooldown<=0&&c.lap>=0&&at.progress>total+pitLane.entry-35&&at.progress<total+pitLane.entry+45){c.inPit=true;c.pitProgress=pitLane.entry;c.pitServiced=false;c.speed=Math.min(c.speed,pitLane.speed)}
- if(c.inPit){let before=c.pitProgress;pitDrive(c,i,dt);if(c.pitProgress>before&&before<0&&c.pitProgress>=0&&c.nextGate===0){c.gatesPassed++;c.nextGate=1;c.lap++;let t=elapsed-c.lapStarted;if(c.lapStarted>0&&t>2){c.lastLapTime=t;if(i===0){lastLap=t;bestLap=Math.min(bestLap,t)}}c.lapStarted=elapsed;if(c.lap>=laps){c.done=true;c.finish=elapsed}}c.raceDistance=(c.gatesPassed||0)*total/12+clamp(c.pitProgress,0,total/12)-c.startOffset;continue}
+ if(c.inPit){let before=c.pitProgress;pitDrive(c,i,dt);if(c.pitProgress>before&&before<0&&c.pitProgress>=0&&c.nextGate===0){c.gatesPassed++;c.nextGate=1;c.lap++;let t=elapsed-c.lapStarted;if(c.lapStarted>0&&t>2){c.lastLapTime=t;if(i===0){lastLap=t;bestLap=Math.min(bestLap,t)}}c.lapStarted=elapsed;if(c.lap>=laps){c.done=true;c.finish=elapsed}}c.raceDistance=c.odometer||0;continue}
  if(i===0){steer=Number(controls.right)-Number(controls.left);gas=Number(controls.gas)}else{
  // AI V6: anticipates corners, picks a lateral lane, and changes lanes to overtake.
  let aheadProgress=mod(at.progress+Math.max(75,c.speed*.48),total);
@@ -162,10 +161,10 @@ for(let i=0;i<10;i++){let c=cars[i];if(c.done)continue;let at=locate(c.x,c.y),st
  for(let j=0;j<10;j++){if(j===i||cars[j].done)continue;let o=cars[j],rx=o.x-c.x,ry=o.y-c.y,d=hypot(rx,ry),forward=Math.cos(c.angle)*rx+Math.sin(c.angle)*ry,lateral=Math.cos(c.angle)*ry-Math.sin(c.angle)*rx;
  if(forward>5&&forward<135&&Math.abs(lateral)<49){let leftClear=true,rightClear=true;for(let k=0;k<10;k++){if(k===i||k===j||cars[k].done)continue;let v=cars[k],fx=Math.cos(c.angle)*(v.x-c.x)+Math.sin(c.angle)*(v.y-c.y),sy=Math.cos(c.angle)*(v.y-c.y)-Math.sin(c.angle)*(v.x-c.x);if(fx>-30&&fx<110){if(sy<0&&sy>-65)leftClear=false;if(sy>0&&sy<65)rightClear=false}}
  let direction=leftClear&&(!rightClear||c.aiLane<=0)?-1:rightClear?1:0;
- if(direction){desiredLane=direction*Math.min(roadWidth*.28,28);c.aiPass=.7}else maxSpeed=Math.min(maxSpeed,Math.max(115,o.speed+22));break}}
- for(let o of obstacles){let rx=o.x-c.x,ry=o.y-c.y,forward=Math.cos(c.angle)*rx+Math.sin(c.angle)*ry,side=Math.cos(c.angle)*ry-Math.sin(c.angle)*rx;if(forward>0&&forward<105&&Math.abs(side)<35){desiredLane=clamp(desiredLane+(side>=0?-29:29),-roadWidth*.29,roadWidth*.29);maxSpeed=Math.min(maxSpeed,195)}}
+ if(direction){desiredLane=direction*Math.min(roadWidth*.36,28);c.aiPass=.7}else maxSpeed=Math.min(maxSpeed,Math.max(115,o.speed+22));break}}
+ for(let o of obstacles){let rx=o.x-c.x,ry=o.y-c.y,forward=Math.cos(c.angle)*rx+Math.sin(c.angle)*ry,side=Math.cos(c.angle)*ry-Math.sin(c.angle)*rx;if(forward>0&&forward<105&&Math.abs(side)<35){desiredLane=clamp(desiredLane+(side>=0?-29:29),-roadWidth*.36,roadWidth*.36);maxSpeed=Math.min(maxSpeed,195)}}
  c.aiLane+=(desiredLane-c.aiLane)*Math.min(1,dt*3.2);
- c.aiLane=clamp(c.aiLane,-roadWidth*.29,roadWidth*.29);
+ c.aiLane=clamp(c.aiLane,-roadWidth*.36,roadWidth*.36);
  let tx=ahead.x+ahead.nx*c.aiLane,ty=ahead.y+ahead.ny*c.aiLane;
  let desired=Math.atan2(ty-c.y,tx-c.x),diff=mod(desired-c.angle+Math.PI,2*Math.PI)-Math.PI;
  steer=clamp(diff*[2.9,3.7,4.1][difficulty],-1,1);
@@ -193,9 +192,9 @@ for(let i=0;i<10;i++)for(let j=i+1;j<10;j++){
  let avx=Math.cos(a.angle)*a.speed+(a.bumpX||0),avy=Math.sin(a.angle)*a.speed+(a.bumpY||0);
  let bvx=Math.cos(b.angle)*b.speed+(b.bumpX||0),bvy=Math.sin(b.angle)*b.speed+(b.bumpY||0);
  let closing=(avx-bvx)*nx+(avy-bvy)*ny;
- let impulse=clamp(95+Math.max(0,closing)*.5,95,220);let severity=clamp(2+Math.max(0,closing)*.045,2,13);addDamage(a,severity);addDamage(b,severity);sparks((a.x+b.x)/2,(a.y+b.y)/2,Math.min(1.5,impulse/140));
- if(!a.done){a.bumpX=(a.bumpX||0)-nx*impulse;a.bumpY=(a.bumpY||0)-ny*impulse;a.speed=Math.max(75,a.speed*.88);a.hitCooldown=.18;}
- if(!b.done){b.bumpX=(b.bumpX||0)+nx*impulse;b.bumpY=(b.bumpY||0)+ny*impulse;b.speed=Math.max(75,b.speed*.88);b.hitCooldown=.18;}
+ let impulse=clamp(65+Math.max(0,closing)*.35,65,165);let severity=clamp((Math.max(0,closing)-30)*.035,0,7);if(severity>0){addDamage(a,severity);addDamage(b,severity);}sparks((a.x+b.x)/2,(a.y+b.y)/2,Math.min(1.5,impulse/140));
+ if(!a.done){a.bumpX=(a.bumpX||0)-nx*impulse;a.bumpY=(a.bumpY||0)-ny*impulse;a.speed=Math.max(75,a.speed*(closing>45?.94:1));a.hitCooldown=1.15;}
+ if(!b.done){b.bumpX=(b.bumpX||0)+nx*impulse;b.bumpY=(b.bumpY||0)+ny*impulse;b.speed=Math.max(75,b.speed*(closing>45?.94:1));b.hitCooldown=1.15;}
 }
 order().forEach((i,j)=>cars[i].rank=j+1);if(cars[0].done){if(finishWait<0)finishWait=elapsed;if(elapsed-finishWait>Math.max(55,total/90))for(let c of cars)if(!c.done){c.done=true;c.finish=999+elapsed}}if(cars.every(c=>c.done)){award();saveRecord();state='results'} }
 function sparks(x,y,power=1){if(particles.length>160)return;for(let k=0;k<9;k++){let a=Math.random()*Math.PI*2,v=(45+Math.random()*130)*power;particles.push({x,y,vx:Math.cos(a)*v,vy:Math.sin(a)*v,life:.25+Math.random()*.38,max:.65,r:1.5+Math.random()*2.7,color:k%3?'#ffd15b':'#fff4d4'})}}
@@ -241,7 +240,7 @@ let a=pts[0],b=pts[1],dx=(b[0]-a[0])/segments[0],dy=(b[1]-a[1])/segments[0];for(
  if(weather>=2){g.save();g.globalAlpha=weather===3?.16:.07;g.fillStyle='#80a8d1';g.fillRect(0,0,W,H);g.restore();g.strokeStyle='#c5e3ff55';g.lineWidth=1;for(let j=0;j<(weather===3?75:30);j++){let xx=(j*137+elapsed*110)%W,yy=(j*89+elapsed*240)%H;g.beginPath();g.moveTo(xx,yy);g.lineTo(xx-7,yy+13);g.stroke()}}
  for(let o of oilTraps){let [x,y]=world(o.x,o.y);g.save();g.globalAlpha=Math.min(.88,o.life*2);g.fillStyle='#090d15';g.beginPath();g.ellipse(x,y,23*scale,15*scale,-.25,0,Math.PI*2);g.fill();g.strokeStyle='#7d91b0';g.lineWidth=Math.max(1,scale);g.beginPath();g.ellipse(x-4*scale,y-3*scale,10*scale,4*scale,-.3,0,Math.PI);g.stroke();g.restore()}for(let s of skids){let [x,y]=world(s.x,s.y);g.fillStyle='#17191f88';g.beginPath();g.arc(x,y,3*scale,0,7);g.fill()}for(let o of obstacles){let [x,y]=world(o.x,o.y);if(o.kind==='oil'){g.fillStyle='#10141e';g.beginPath();g.ellipse(x,y,18*scale,11*scale,0,0,7);g.fill()}else{g.fillStyle='#ff841d';g.beginPath();g.arc(x,y,12*scale,0,7);g.fill();g.fillStyle='white';g.beginPath();g.arc(x,y,5*scale,0,7);g.fill()}}for(let p of pickups){if(p.respawn>0)continue;let [x,y]=world(p.x,p.y),color={turbo:'#ffda37',shield:'#56dfff',trap:'#ee66de'}[p.kind];g.fillStyle='#121b2b';g.beginPath();g.arc(x,y,14*scale,0,7);g.fill();g.strokeStyle=color;g.lineWidth=3;g.stroke();label({turbo:'T',shield:'B',trap:'P'}[p.kind],x,y,Math.max(10,15*scale),color)}cars.forEach((c,i)=>{if(!c.done)drawCar(c,i,world,scale)});for(let p of particles){let [x,y]=world(p.x,p.y);g.globalAlpha=Math.min(1,p.life*2);g.fillStyle=p.color;g.beginPath();g.arc(x,y,p.r*scale,0,Math.PI*2);g.fill()}g.globalAlpha=1;
 let top=Math.max(78,H*.16);g.fillStyle='#0d1424f2';g.fillRect(0,0,W,top);
- label('MINI RACING WEB V16',W*.5,top*.16,Math.min(20,H*.040),'#ffdb62');
+ label('MINI RACING WEB V17',W*.5,top*.16,Math.min(20,H*.040),'#ffdb62');
  label(state==='qual'?`QUALIF ${Math.min(qualTimes.length+1,qualLaps)}/${qualLaps}`:`TOUR ${clamp(cars[0].lap+1,1,laps)}/${laps}`,W*.12,top*.55,Math.min(18,H*.037));
  label(state==='qual'?`MEILLEUR ${qualTimes.length?Math.min(...qualTimes).toFixed(2)+'s':'--'}`:`P${cars[0].rank}/10`,W*.35,top*.55,Math.min(18,H*.037),'#ffdc5b');
  label('TOTAL '+formatTime(elapsed),W*.70,top*.42,Math.min(16,H*.032));
@@ -250,9 +249,9 @@ let top=Math.max(78,H*.16);g.fillStyle='#0d1424f2';g.fillRect(0,0,W,top);
  if(lastLap>0)label('DERN. '+formatTime(lastLap),W*.36,top*.85,Math.min(13,H*.026),'#d7e4ff');
  if(champ)label(`CHAMPIONNAT ${round+1}/5 - ${scores[0]} PTS`,W*.5,top+19,Math.min(18,H*.036),'#e5f0ff');if(countdown>0)label(countdown>1?Math.ceil(countdown):'GO !',W*.5,H*.34,Math.min(52,H*.10),'#ffdb5c');if(cars[0].done)label('ARRIVEE - ATTENTE DES AUTRES',W*.5,top+46,Math.min(20,H*.04),'#ffdc5c');if(cars[0].boost>0)label('TURBO !',W*.23,top+40,18,'#ffdf52');if(cars[0].shield>0)label('BOUCLIER',W*.23,top+40,18,'#5deaff');if(state==='race')drawTimingTower(top);
  if(state==='race'){let eta=weatherChangeAt-weatherTimer;let forecastText=!weatherWillChange?'PREVISION : TEMPS STABLE':eta>75?'PREVISION : EVOLUTION POSSIBLE':'PREVISION : '+weatherNames[forecast]+' DANS '+Math.ceil(Math.max(0,eta))+'s';label(forecastText,W*.46,top+Math.min(27,H*.045),Math.min(15,H*.028),'#ffe17a');label(tireAdvice[weather],W*.46,top+Math.min(49,H*.085),Math.min(13,H*.026),'#c7edff')}if(weatherAlert>0)label('CHANGEMENT : '+weatherNames[weather],W*.48,top+69,Math.min(18,H*.035),'#ffdf77');
- let fy=H*.87;rounded(W*.42,fy,W*.20,12,3,'#1b2635','#d7e2f0');rounded(W*.42,fy,W*.20*cars[0].fuel/100,12,3,cars[0].fuel<20?'#ef5555':'#50d995');label('ESSENCE '+Math.ceil(cars[0].fuel)+'%',W*.52,fy-13,Math.min(13,H*.026),'#fff');
- label('PNEUS '+tireNames[cars[0].tire]+' '+Math.floor(100-cars[0].tireWear)+'%',W*.52,fy+27,Math.min(13,H*.026),'#fff');
- let dmg=cars[0].damage||0;rounded(W*.42,fy+42,W*.20,9,3,'#1b2635','#d7e2f0');if(dmg>0)rounded(W*.42,fy+42,W*.20*dmg/100,9,3,dmg>65?'#ef5555':dmg>30?'#f6ae43':'#56d98e');label('DEGATS '+Math.round(dmg)+'%',W*.52,fy+64,Math.min(12,H*.024),dmg>65?'#ff7676':'#fff');
+ let fy=H*.81;rounded(W*.42,fy,W*.20,12,3,'#1b2635','#d7e2f0');rounded(W*.42,fy,W*.20*cars[0].fuel/100,12,3,cars[0].fuel<20?'#ef5555':'#50d995');label('ESSENCE '+Math.ceil(cars[0].fuel)+'%',W*.52,fy-13,Math.min(13,H*.026),'#fff');
+ label('PNEUS '+tireNames[cars[0].tire]+' '+Math.floor(100-cars[0].tireWear)+'%',W*.52,fy+37,Math.min(13,H*.026),'#fff');
+ let dmg=cars[0].damage||0;rounded(W*.42,fy+62,W*.20,9,3,'#1b2635','#d7e2f0');if(dmg>0)rounded(W*.42,fy+42,W*.20*dmg/100,9,3,dmg>65?'#ef5555':dmg>30?'#f6ae43':'#56d98e');label('DEGATS '+Math.round(dmg)+'%',W*.52,fy+79,Math.min(12,H*.024),dmg>65?'#ff7676':'#fff');
  if(cars[0].requestedPit&&cars[0].pitTime<=0)label('ARRET PROGRAMME : ENTREE DES STANDS',W*.5,H*.43,Math.min(17,H*.033),'#ffe36a');if(cars[0].inPit&&cars[0].pitTime<=0)label('VOIE DES STANDS : VITESSE LIMITEE',W*.5,H*.41,Math.min(16,H*.031),'#ffdf77');if(cars[0].pitTime>0)label('ARRET AUX STANDS '+cars[0].pitTime.toFixed(1)+'s',W*.5,H*.40,Math.min(22,H*.045),'#ffe36a');
  buttons={};let bh=Math.max(54,H*.13),by=H-Math.max(74,H*.18);[['left',.025,.145,'◀'],['right',.185,.145,'▶'],['brake',.675,.135,'FREIN'],['gas',.83,.145,'GAZ']].forEach(([key,x,w,t])=>{let r={x:W*x,y:by,w:W*w,h:bh};buttons[key]=r;rounded(r.x,r.y,r.w,r.h,12,controls[key]?'#546577b0':'#111b2a90','#d8e2ec');label(t,r.x+r.w/2,r.y+r.h/2,Math.min(23,H*.042))});
  let pit={x:W*.02,y:top+H*.16,w:W*.13,h:H*.075};buttons.pit=pit;rounded(pit.x,pit.y,pit.w,pit.h,8,cars[0].requestedPit?'#af7224dd':'#263d54dd','#ffd765');label('STANDS',pit.x+pit.w/2,pit.y+pit.h/2,Math.min(15,H*.032));
@@ -269,9 +268,9 @@ function drawPitPanel(){
 }
 function drawTimingTower(top){
  let sorted=order(),w=clamp(W*.23,128,210),x=W-w-8,rowH=Math.min(22,Math.max(15,(H-top-95)/10));
- let y=top+9,leader=cars[sorted[0]],leaderDist=leader.lap*total+leader.progress;
+ let y=top+9,leader=cars[sorted[0]],leaderDist=leader.raceDistance||0;
  rounded(x-5,y-5,w+7,rowH*10+13,8,'#0b1220dc','#51647c');
- sorted.forEach((id,pos)=>{let c=cars[id],dist=c.lap*total+c.progress;
+ sorted.forEach((id,pos)=>{let c=cars[id],dist=c.raceDistance||0;
  let gap=leaderDist-dist,txt=pos===0?'LEADER':c.done&&leader.done?'+'+(c.finish-leader.finish).toFixed(1)+'s':gap>=total?'+'+Math.floor(gap/total)+' tour(s)':'+'+(Math.max(0,gap)/Math.max(90,leader.speed||200)).toFixed(1)+'s';
  let yy=y+rowH*(pos+.5);if(id===0)rounded(x-2,y+rowH*pos-1,w+2,rowH,3,'#295b50');
  g.fillStyle=driverColor(id);g.fillRect(x+3,yy-5,4,10);

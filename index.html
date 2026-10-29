@@ -149,7 +149,7 @@ function endQual(){let best=qualTimes.length?Math.min(...qualTimes):999;
 function beginRace(){start('race')}
 function order(){return cars.map((c,i)=>i).sort((a,b)=>{let A=cars[a],B=cars[b];if(A.done&&B.done)return A.finish-B.finish;if(A.done)return -1;if(B.done)return 1;return(B.raceDistance??(B.lap*total+B.progress))-(A.raceDistance??(A.lap*total+A.progress))})}
 // Classements partages : API Cloudflare Workers + base D1.
-const GLOBAL_API_URL='https://racing-api.yannair13790.workers.dev';
+const GLOBAL_API_URL='https://mini-racing-api.yannair13790.workers.dev';
 const PLAYER_ID_KEY='miniRacingPlayerIdV18';
 let globalData=null,globalLoading=false,globalError='',globalTab=0,globalSent=false,globalStatus='';
 function playerId(){

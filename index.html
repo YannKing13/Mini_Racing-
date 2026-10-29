@@ -1,4 +1,4 @@
-<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover"><meta name="theme-color" content="#111a2b"><title>Mini Racing Championship V22</title><style>*{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#111827;touch-action:none;font-family:Arial,sans-serif}canvas{display:block;width:100vw;height:100dvh;touch-action:none}#rotate{position:fixed;inset:0;background:#111827ed;color:white;display:none;align-items:center;justify-content:center;text-align:center;font-size:22px;padding:30px;z-index:4}@media(orientation:portrait){#rotate{display:flex}}</style></head><body><canvas id="game"></canvas><div id="rotate">↻<br>Tourne ton téléphone en paysage pour jouer</div><script>
+<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover"><meta name="theme-color" content="#111a2b"><title>Mini Racing Championship V22.3</title><style>*{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#111827;touch-action:none;font-family:Arial,sans-serif}canvas{display:block;width:100vw;height:100dvh;touch-action:none}#rotate{position:fixed;inset:0;background:#111827ed;color:white;display:none;align-items:center;justify-content:center;text-align:center;font-size:22px;padding:30px;z-index:4}@media(orientation:portrait){#rotate{display:flex}}</style></head><body><canvas id="game"></canvas><div id="rotate">↻<br>Tourne ton téléphone en paysage pour jouer</div><script>
 'use strict';
 const cv=document.getElementById('game'),g=cv.getContext('2d');let W=960,H=540,DPR=1;
 function resize(){DPR=Math.min(devicePixelRatio||1,2);W=innerWidth;H=innerHeight;cv.width=Math.round(W*DPR);cv.height=Math.round(H*DPR);g.setTransform(DPR,0,0,DPR,0,0)}addEventListener('resize',resize);resize();
@@ -156,6 +156,34 @@ function order(){return cars.map((c,i)=>i).sort((a,b)=>{let A=cars[a],B=cars[b];
 const GLOBAL_API_URL='https://mini-racing-api.yannair13790.workers.dev';
 const PLAYER_ID_KEY='miniRacingPlayerIdV18';
 let globalData=null,globalLoading=false,globalError='',globalTab=0,globalSent=false,globalStatus='';
+let globalCircuitPage=0,globalChampLength=5,globalDifficulty=1,globalExtraError='';
+const difficultyNames=['FACILE','NORMAL','DIFFICILE'];
+const jsonPost=(path,data)=>apiJSON(path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});
+function asRows(data){return Array.isArray(data)?data:Array.isArray(data?.results)?data.results:[]}
+function lapTimeOf(r){return Number(r.lap_time??r.best_lap??r.time??r.best_time)}
+function circuitOf(r){return String(r.circuit??r.track??'')}
+function difficultyOf(r){const n=r.difficulty;return Number.isInteger(Number(n))?Number(n):difficultyNames.indexOf(String(n||'').toUpperCase())}
+async function loadExtras(){
+ const requests=await Promise.allSettled([apiJSON('/lap-records'),apiJSON('/championships')]);
+ globalExtraError=requests.some(r=>r.status==='rejected')?'CERTAINES DONNEES MONDIALES SONT INDISPONIBLES':'';
+ return {records:requests[0].status==='fulfilled'?asRows(requests[0].value):[],
+ championships:requests[1].status==='fulfilled'?asRows(requests[1].value):[]};
+}
+async function publishLapRecord(){
+ if(!Number.isFinite(bestLap)||bestLap<=2||bestLap>86400)return;
+ const payload={player_id:playerId(),circuit:tracks[track][0],difficulty,lap_time:Number(bestLap.toFixed(3))};
+ await jsonPost('/lap-records',payload);
+}
+async function publishChampionship(){
+ const ids=Array.from({length:10},(_,i)=>i).sort((a,b)=>scores[b]-scores[a]||a-b);
+ const position=ids.indexOf(0)+1;
+ await registerGlobalPlayer();
+ await jsonPost('/championships',{
+  player_id:playerId(),difficulty,rounds:championshipLength,
+  races:championshipLength,championship_length:championshipLength,
+  position,rank:position,points:scores[0],title:position===1
+ });
+}
 function playerId(){
  let id='';try{id=localStorage.getItem(PLAYER_ID_KEY)||''}catch(e){}
  if(!/^[a-zA-Z0-9_-]{8,64}$/.test(id)){
@@ -176,8 +204,8 @@ async function registerGlobalPlayer(){
 async function fetchGlobal(){
  globalLoading=true;globalError='';globalData=null;
  try{
-  const [drivers,teamsResult]=await Promise.all([apiJSON('/leaderboard'),apiJSON('/teams')]);
-  globalData={drivers:Array.isArray(drivers)?drivers:[],teams:Array.isArray(teamsResult)?teamsResult:[]};
+  const [drivers,teamsResult,extras]=await Promise.all([apiJSON('/leaderboard'),apiJSON('/teams'),loadExtras()]);
+  globalData={drivers:asRows(drivers),teams:asRows(teamsResult),...extras};
  }catch(e){globalError='CONNEXION : '+e.message}
  finally{globalLoading=false}
 }
@@ -191,32 +219,61 @@ async function publishResult(){
   await registerGlobalPlayer();
   await apiJSON('/results',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
   globalStatus='RESULTAT ENREGISTRE EN LIGNE';
+   try{await publishLapRecord();globalStatus='RESULTAT ET TOUR ENREGISTRES EN LIGNE'}
+   catch(lapError){globalStatus='COURSE ENREGISTREE / RECORD : '+lapError.message;console.warn('Record mondial',lapError)}
  }catch(e){globalSent=false;globalStatus='RESULTAT NON ENVOYE : '+e.message;console.warn('Classement mondial',e)}
 }
 function globalScreen(){
  g.fillStyle='#192338';g.fillRect(0,0,W,H);
- label('CLASSEMENT MONDIAL — MINI RACING',W/2,H*.075,Math.min(27,H*.057),'#ffda58');
- const tabs=['PILOTES','ECURIES','MES STATS','ACTUALISER'];
- tabs.forEach((t,i)=>{let x=W*(.04+i*.235),y=H*.14;rounded(x,y,W*.22,H*.085,8,i===globalTab?'#365d74':'#263246',i===globalTab?'#90dfff':'#546579');label(t,x+W*.11,y+H*.043,Math.min(14,H*.029))});
- if(globalLoading){label('CHARGEMENT...',W/2,H*.46,19);}
- else if(globalError){label(globalError,W/2,H*.45,Math.min(16,H*.032),'#ffbf8e');label('TOUCHER ACTUALISER POUR REESSAYER',W/2,H*.55,Math.min(15,H*.03));}
+ label('CLASSEMENTS MONDIAUX - MINI RACING',W/2,H*.065,Math.min(24,H*.05),'#ffda58');
+ const tabs=['PILOTES','ECURIES','MES STATS','RECORDS','TITRES','ACTUALISER'];
+ tabs.forEach((t,i)=>{let x=W*(.018+i*.164),y=H*.125;rounded(x,y,W*.156,H*.082,7,i===globalTab?'#365d74':'#263246',i===globalTab?'#90dfff':'#546579');label(t,x+W*.078,y+H*.041,Math.min(12,H*.026))});
+ if(globalLoading){label('CHARGEMENT...',W/2,H*.47,19);}
+ else if(globalError){label(globalError,W/2,H*.45,Math.min(16,H*.032),'#ffbf8e');}
  else if(globalData){
   if(globalTab===0||globalTab===1){
    let rows=(globalTab===0?globalData.drivers:globalData.teams).slice(0,10);
-   rows.forEach((r,i)=>{let y=H*(.285+i*.056),title='',right='';
-    if(globalTab===0){title=(r.pseudo||'PILOTE')+' — '+(r.team||'SANS ECURIE');right=(r.points||0)+' pts / '+(r.races||0)+' courses';}
+   rows.forEach((r,i)=>{let y=H*(.27+i*.057),title='',right='';
+    if(globalTab===0){title=(r.pseudo||'PILOTE')+' - '+(r.team||'SANS ECURIE');right=(r.points||0)+' pts / '+(r.races||0)+' courses';}
     else{title=r.team||'SANS ECURIE';right=(r.points||0)+' pts / '+(r.wins||0)+' victoires';}
-    label((i+1)+'. '+title,W*.075,y,Math.min(16,H*.032),'#e9f3ff','left');label(right,W*.93,y,Math.min(15,H*.03),'#ffdf73','right');
+    label((i+1)+'. '+title,W*.06,y,Math.min(15,H*.029),'#e9f3ff','left');
+    label(right,W*.94,y,Math.min(14,H*.028),'#ffdf73','right');
    });
    if(!rows.length)label('AUCUN RESULTAT POUR LE MOMENT',W/2,H*.47,18);
   }else if(globalTab===2){
    let r=globalData.drivers.find(r=>r.id===playerId());
-   label(playerName+' — '+teams[teamChoice],W/2,H*.32,Math.min(22,H*.044),'#bce9ff');
-   if(r){label('COURSES : '+r.races+'     POINTS : '+r.points,W/2,H*.44,Math.min(21,H*.041));label('VICTOIRES : '+r.wins+'     PODIUMS : '+r.podiums,W/2,H*.56,Math.min(21,H*.041),'#ffdf73');let rank=globalData.drivers.findIndex(x=>x.id===r.id)+1;label('RANG MONDIAL : '+rank,W/2,H*.68,Math.min(22,H*.044),'#a5ffce');}
-   else label('AUCUNE COURSE ENREGISTREE POUR CE PILOTE',W/2,H*.50,Math.min(17,H*.034));
+   label(playerName+' - '+teams[teamChoice],W/2,H*.31,Math.min(22,H*.043),'#bce9ff');
+   if(r){label('COURSES : '+r.races+'     POINTS : '+r.points,W/2,H*.43,Math.min(20,H*.039));label('VICTOIRES : '+r.wins+'     PODIUMS : '+r.podiums,W/2,H*.55,Math.min(20,H*.039),'#ffdf73');let rank=globalData.drivers.findIndex(x=>x.id===r.id)+1;label('RANG MONDIAL : '+rank,W/2,H*.66,Math.min(21,H*.043),'#a5ffce');}
+   else label('AUCUNE COURSE ENREGISTREE',W/2,H*.50,18);
+  }else if(globalTab===3){
+   label('RECORDS MONDIAUX - '+difficultyNames[globalDifficulty],W/2,H*.255,Math.min(19,H*.039),'#ffdf73');
+   label('TOUCHER LE TITRE POUR CHANGER LA DIFFICULTE',W/2,H*.31,Math.min(12,H*.025),'#a9c9e8');
+   const list=globalData.records||[];
+   tracks.forEach((t,i)=>{
+    let matching=list.filter(r=>circuitOf(r)===t[0]&&difficultyOf(r)===globalDifficulty&&Number.isFinite(lapTimeOf(r))&&lapTimeOf(r)>0);
+    matching.sort((a,b)=>lapTimeOf(a)-lapTimeOf(b));
+    let r=matching[0],y=H*(.355+i*.049);
+    label(t[0],W*.055,y,Math.min(13,H*.026),'#eaf2ff','left');
+    label(r?formatTime(lapTimeOf(r)):'--:--.--',W*.63,y,Math.min(13,H*.026),'#ffdf77');
+    label(r?String(r.pseudo||r.driver||r.player_name||'PILOTE').slice(0,17):'-',W*.94,y,Math.min(13,H*.026),'#bce9ff','right');
+   });
+  }else if(globalTab===4){
+   label('CHAMPIONNATS MONDIAUX - '+globalChampLength+' GP - '+difficultyNames[globalDifficulty],W/2,H*.255,Math.min(18,H*.036),'#ffdf73');
+   label('TOUCHER LE TITRE POUR CHANGER LE FORMAT / DIFFICULTE',W/2,H*.315,Math.min(12,H*.024),'#a9c9e8');
+   const rows=(globalData.championships||[]).filter(r=>{
+    let length=Number(r.rounds??r.races??r.championship_length??r.length);
+    return length===globalChampLength&&difficultyOf(r)===globalDifficulty;
+   }).sort((a,b)=>Number(b.titles??b.wins??0)-Number(a.titles??a.wins??0)||Number(b.points??b.best_points??0)-Number(a.points??a.best_points??0)).slice(0,9);
+   rows.forEach((r,i)=>{
+    let y=H*(.37+i*.056);
+    label((i+1)+'. '+String(r.pseudo||r.driver||r.player_name||'PILOTE').slice(0,20),W*.07,y,Math.min(15,H*.029),'#eaf2ff','left');
+    label((r.titles??r.wins??(r.title?1:0))+' titres / '+(r.points??r.best_points??0)+' pts',W*.92,y,Math.min(14,H*.028),'#ffdf77','right');
+   });
+   if(!rows.length)label('AUCUN CHAMPIONNAT ENREGISTRE',W/2,H*.53,18);
   }else{label('TOUCHER ACTUALISER POUR RECHARGER',W/2,H*.46,Math.min(19,H*.038));}
+  if(globalExtraError&&(globalTab===3||globalTab===4))label(globalExtraError,W/2,H*.89,Math.min(12,H*.024),'#ffb17c');
  }
- label('TOUCHER EN BAS POUR REVENIR AU MENU',W/2,H*.95,Math.min(17,H*.034),'#8bffbd');
+ label('TOUCHER EN BAS POUR REVENIR AU MENU',W/2,H*.96,Math.min(15,H*.029),'#8bffbd');
 }
 // Records personnels stockés localement sur cet appareil (sans partage serveur).
 const RECORD_KEY='miniRacingRecordsV15';
@@ -232,7 +289,7 @@ function recordsScreen(){g.fillStyle='#192338';g.fillRect(0,0,W,H);label('RECORD
 const V22_RECORDS='miniRacingV22Records';
 function v22Records(){try{return JSON.parse(localStorage.getItem(V22_RECORDS)||'{"laps":{},"championships":{}}')}catch(e){return {laps:{},championships:{}}}}
 function saveV22Lap(){if(!Number.isFinite(bestLap)||bestLap<=2)return;try{let r=v22Records(),key=track+'_'+difficulty,old=r.laps[key];if(!old||bestLap<old.time)r.laps[key]={time:bestLap,driver:playerName,team:teams[teamChoice]};localStorage.setItem(V22_RECORDS,JSON.stringify(r))}catch(e){}}
-function saveV22Champ(){if(champSaved)return;champSaved=true;try{let r=v22Records(),key=championshipLength+'_'+difficulty,old=r.championships[key]||{best:0,titles:0,seasons:0};old.best=Math.max(old.best,scores[0]);old.seasons++;let ids=Array.from({length:10},(_,i)=>i).sort((a,b)=>scores[b]-scores[a]);if(ids[0]===0)old.titles++;r.championships[key]=old;localStorage.setItem(V22_RECORDS,JSON.stringify(r))}catch(e){}}
+function saveV22Champ(){if(champSaved)return;champSaved=true;publishChampionship().catch(e=>console.warn('Championnat mondial',e));try{let r=v22Records(),key=championshipLength+'_'+difficulty,old=r.championships[key]||{best:0,titles:0,seasons:0};old.best=Math.max(old.best,scores[0]);old.seasons++;let ids=Array.from({length:10},(_,i)=>i).sort((a,b)=>scores[b]-scores[a]);if(ids[0]===0)old.titles++;r.championships[key]=old;localStorage.setItem(V22_RECORDS,JSON.stringify(r))}catch(e){}}
 function v22RecordScreen(){g.fillStyle='#192338';g.fillRect(0,0,W,H);let r=v22Records();label('RECORDS V22 - STOCKES SUR CE TELEPHONE',W/2,H*.07,Math.min(22,H*.044),'#ffdb58');label('DIFFICULTE : '+['FACILE','NORMAL','DIFFICILE'][difficulty]+' (toucher en haut pour changer)',W/2,H*.14,Math.min(17,H*.033));tracks.forEach((t,i)=>{let y=H*(.22+i*.058),rec=r.laps[i+'_'+difficulty];label(t[0],W*.08,y,Math.min(15,H*.027),'#eaf2ff','left');label(rec?formatTime(rec.time):'--:--.--',W*.92,y,Math.min(15,H*.027),'#ffdf77','right')});let cr=r.championships[championshipLength+'_'+difficulty]||{best:0,titles:0,seasons:0};label('CHAMPIONNAT '+championshipLength+' GP : '+cr.best+' PTS RECORD  /  '+cr.titles+' TITRES  /  '+cr.seasons+' SAISONS',W/2,H*.85,Math.min(15,H*.03),'#a9f8cd');label('TOUCHER EN BAS POUR REVENIR',W/2,H*.96,Math.min(17,H*.032))}
 function award(){if(awarded)return;awarded=true;saveV22Lap();publishResult();if(champ){let rank=order();pointsTable.forEach((p,j)=>scores[rank[j]]+=p)}}
 function step(dt){if(state!=='race'&&state!=='qual')return;if(pitPanel&&state==='race')return;countdown-=dt;if(countdown>0)return;elapsed+=dt;if(state==='qual'&&qualStart===0)qualStart=elapsed;weatherTimer+=dt;weatherAlert=Math.max(0,weatherAlert-dt);if(state==='race'&&weatherWillChange&&weatherTimer>=weatherChangeAt){weather=forecast;weatherAlert=7;planWeather(false)}for(let c of cars){c.boost=Math.max(0,c.boost-dt);c.shield=Math.max(0,c.shield-dt);c.trap=Math.max(0,c.trap-dt);c.collisionGrace=Math.max(0,c.collisionGrace-dt);c.bumpX=(c.bumpX||0)*Math.exp(-4*dt);c.bumpY=(c.bumpY||0)*Math.exp(-4*dt);c.hitCooldown=Math.max(0,(c.hitCooldown||0)-dt);c.pitCooldown=Math.max(0,c.pitCooldown-dt)}oilTraps=oilTraps.filter(o=>(o.life-=dt)>0);for(let p of pickups){if(p.respawn>0){p.respawn=Math.max(0,p.respawn-dt);if(p.respawn===0){let next=randomBonusPosition(p);if(next){p.x=next.x;p.y=next.y}else p.respawn=1}}}skids=skids.filter(s=>(s.t-=dt)>0);particles=particles.filter(p=>(p.life-=dt)>0);for(let p of particles){p.x+=p.vx*dt;p.y+=p.vy*dt;p.vx*=Math.exp(-3*dt);p.vy*=Math.exp(-3*dt)}
@@ -334,7 +391,7 @@ let a=pts[0],b=pts[1],dx=(b[0]-a[0])/segments[0],dy=(b[1]-a[1])/segments[0];for(
  if(weather>=2){g.save();g.globalAlpha=weather===3?.16:.07;g.fillStyle='#80a8d1';g.fillRect(0,0,W,H);g.restore();g.strokeStyle='#c5e3ff55';g.lineWidth=1;for(let j=0;j<(weather===3?75:30);j++){let xx=(j*137+elapsed*110)%W,yy=(j*89+elapsed*240)%H;g.beginPath();g.moveTo(xx,yy);g.lineTo(xx-7,yy+13);g.stroke()}}
  for(let o of oilTraps){let [x,y]=world(o.x,o.y);g.save();g.globalAlpha=Math.min(.88,o.life*2);g.fillStyle='#090d15';g.beginPath();g.ellipse(x,y,23*scale,15*scale,-.25,0,Math.PI*2);g.fill();g.strokeStyle='#7d91b0';g.lineWidth=Math.max(1,scale);g.beginPath();g.ellipse(x-4*scale,y-3*scale,10*scale,4*scale,-.3,0,Math.PI);g.stroke();g.restore()}for(let s of skids){let [x,y]=world(s.x,s.y);g.fillStyle='#17191f88';g.beginPath();g.arc(x,y,3*scale,0,7);g.fill()}for(let o of obstacles){let [x,y]=world(o.x,o.y);if(o.kind==='oil'){g.fillStyle='#10141e';g.beginPath();g.ellipse(x,y,18*scale,11*scale,0,0,7);g.fill()}else{g.fillStyle='#ff841d';g.beginPath();g.arc(x,y,12*scale,0,7);g.fill();g.fillStyle='white';g.beginPath();g.arc(x,y,5*scale,0,7);g.fill()}}for(let p of (state==='qual'?[]:pickups)){if(p.respawn>0)continue;let [x,y]=world(p.x,p.y),color={turbo:'#ffda37',shield:'#56dfff',trap:'#ee66de'}[p.kind];g.fillStyle='#121b2b';g.beginPath();g.arc(x,y,14*scale,0,7);g.fill();g.strokeStyle=color;g.lineWidth=3;g.stroke();label({turbo:'T',shield:'B',trap:'P'}[p.kind],x,y,Math.max(10,15*scale),color)}cars.forEach((c,i)=>{if(!c.done)drawCar(c,i,world,scale)});for(let p of particles){let [x,y]=world(p.x,p.y);g.globalAlpha=Math.min(1,p.life*2);g.fillStyle=p.color;g.beginPath();g.arc(x,y,p.r*scale,0,Math.PI*2);g.fill()}g.globalAlpha=1;
 let top=Math.max(78,H*.16);g.fillStyle='#0d1424f2';g.fillRect(0,0,W,top);
- label('MINI RACING WEB V22.2',W*.5,top*.16,Math.min(20,H*.040),'#ffdb62');
+ label('MINI RACING WEB V22.3',W*.5,top*.16,Math.min(20,H*.040),'#ffdb62');
  label(state==='qual'?`QUALIF ${Math.min(qualTimes.length+1,qualLaps)}/${qualLaps}`:`TOUR ${clamp(cars[0].lap+1,1,laps)}/${laps}`,W*.12,top*.55,Math.min(18,H*.037));
  label(state==='qual'?`MEILLEUR ${qualTimes.length?Math.min(...qualTimes).toFixed(2)+'s':'--'}`:`P${cars[0].rank}/10`,W*.35,top*.55,Math.min(18,H*.037),'#ffdc5b');
  if(state==='race')label('VITESSE '+Math.round(Math.max(0,cars[0].speed))+' km/h',W*.52,top*.55,Math.min(18,H*.037),'#7ef6ff');
@@ -380,7 +437,7 @@ function drawTimingTower(top){
 }
 function hit(x,y,r){return x>=r.x&&x<=r.x+r.w&&y>=r.y&&y<=r.y+r.h}
 function menu(){g.fillStyle='#192338';g.fillRect(0,0,W,H);ui=[];
- label('MINI RACING CHAMPIONSHIP V22',W/2,H*.055,Math.min(28,H*.063),'#ffdc5c');
+ label('MINI RACING CHAMPIONSHIP V22.3',W/2,H*.055,Math.min(28,H*.063),'#ffdc5c');
  let items=[['CIRCUIT : '+tracks[track][0],.145,'track'],['TOURS COURSE : '+laps+' (1 à 100)',.235,'laps'],['TOURS QUALIFS : '+qualLaps,.325,'qualLaps'],['DIFFICULTE : '+['FACILE','NORMAL','DIFFICILE'][difficulty],.415,'difficulty'],['METEO DEPART : '+weatherNames[weatherChoice],.505,'weather']];
  for(let [v,y,key] of items){label(v,W/2,H*y,Math.min(20,H*.044));ui.push({key,x:W*.18,y:H*(y-.042),w:W*.64,h:H*.085})}
  label('PILOTE : '+driverName(0)+' ('+driverTag(0)+')  ✎',W/2,H*.605,Math.min(18,H*.038),'#bdefff');ui.push({key:'driver',x:W*.18,y:H*.566,w:W*.64,h:H*.065});
@@ -410,7 +467,9 @@ function podium(){g.fillStyle='#192338';g.fillRect(0,0,W,H);
  ids.forEach((id,j)=>{let yy=H*(.17+j*.071);label(`${j+1}. ${driverName(id)} (${driverTag(id)}) — ${driverTeam(id)}`,W*.13,yy,Math.min(17,H*.035),driverColor(id),'left');label(scores[id]+' PTS',W*.85,yy,Math.min(17,H*.035),'#ffdf69')});
  label('TOUCHER POUR REVENIR AU MENU',W/2,H*.95,Math.min(21,H*.042),'#70ffa1')}
 function clearControls(){Object.keys(controls).forEach(k=>controls[k]=false)}let touches=new Map();function recalcTouches(){clearControls();for(let p of touches.values())for(let k in buttons)if(hit(p.x,p.y,buttons[k]))controls[k]=true}
-function down(e){e.preventDefault();let x=e.clientX,y=e.clientY;if(pitPanel&&state==='race'){let b=pitPanelButtons.find(r=>hit(x,y,r));if(b){if(b.key==='close')pitPanel=false;else if(b.key==='tireset')tireChoice=(tireChoice+1)%5;else pitPlan[b.key]=!pitPlan[b.key]}return}if(state==='race'||state==='qual'){if(state==='race'&&buttons.pit&&hit(x,y,buttons.pit)){cars[0].requestedPit=!cars[0].requestedPit;return}if(state==='race'&&buttons.tire&&hit(x,y,buttons.tire)){pitPanel=true;clearControls();touches.clear();return}touches.set(e.pointerId,{x,y});recalcTouches();try{cv.setPointerCapture(e.pointerId)}catch(_){}}else if(state==='menu'){let r=ui.find(r=>hit(x,y,r));if(!r)return;switch(r.key){case'track':track=(track+1)%tracks.length;break;case'champlen':championshipLength=championshipLength===5?10:5;break;case'laps':{let v=prompt('Nombre de tours de course (1 à 100) :',laps);if(v!==null)laps=clamp(parseInt(v)||1,1,100);break;}case'qualLaps':qualLaps=qualLaps>=5?1:qualLaps+1;break;case'difficulty':difficulty=(difficulty+1)%3;break;case'color':choice=r.value;break;case'model':modelChoice=(modelChoice+1)%models.length;break;case'driver':editDriver();break;case'team':chooseTeam();break;case'partner':choosePartner();break;case'weather':weatherChoice=(weatherChoice+1)%4;break;case'tire':tireChoice=(tireChoice+1)%5;break;case'records':state='v22records';break;case'global':state='global';globalTab=0;fetchGlobal();break;case'free':champ=false;beginQual();break;case'champ':newChamp();break}}else if(state==='qualResults'){beginRace()}else if(state==='results'){if(champ){round++;if(round>=championshipLength){saveV22Champ();state='podium'}else{track=championshipTracks[round];beginQual()}}else state='menu'}else if(state==='global'){if(y<H*.26){globalTab=clamp(Math.floor((x/W-.04)/.235),0,3);if(globalTab===3)fetchGlobal()}else if(y>H*.87)state='menu'}else if(state==='v22records'){if(y<H*.19)difficulty=(difficulty+1)%3;else if(y>H*.91)state='menu'}else if(state==='podium'||state==='records')state='menu'}
+function down(e){e.preventDefault();let x=e.clientX,y=e.clientY;if(pitPanel&&state==='race'){let b=pitPanelButtons.find(r=>hit(x,y,r));if(b){if(b.key==='close')pitPanel=false;else if(b.key==='tireset')tireChoice=(tireChoice+1)%5;else pitPlan[b.key]=!pitPlan[b.key]}return}if(state==='race'||state==='qual'){if(state==='race'&&buttons.pit&&hit(x,y,buttons.pit)){cars[0].requestedPit=!cars[0].requestedPit;return}if(state==='race'&&buttons.tire&&hit(x,y,buttons.tire)){pitPanel=true;clearControls();touches.clear();return}touches.set(e.pointerId,{x,y});recalcTouches();try{cv.setPointerCapture(e.pointerId)}catch(_){}}else if(state==='menu'){let r=ui.find(r=>hit(x,y,r));if(!r)return;switch(r.key){case'track':track=(track+1)%tracks.length;break;case'champlen':championshipLength=championshipLength===5?10:5;break;case'laps':{let v=prompt('Nombre de tours de course (1 à 100) :',laps);if(v!==null)laps=clamp(parseInt(v)||1,1,100);break;}case'qualLaps':qualLaps=qualLaps>=5?1:qualLaps+1;break;case'difficulty':difficulty=(difficulty+1)%3;break;case'color':choice=r.value;break;case'model':modelChoice=(modelChoice+1)%models.length;break;case'driver':editDriver();break;case'team':chooseTeam();break;case'partner':choosePartner();break;case'weather':weatherChoice=(weatherChoice+1)%4;break;case'tire':tireChoice=(tireChoice+1)%5;break;case'records':state='v22records';break;case'global':state='global';globalTab=0;fetchGlobal();break;case'free':champ=false;beginQual();break;case'champ':newChamp();break}}else if(state==='qualResults'){beginRace()}else if(state==='results'){if(champ){round++;if(round>=championshipLength){saveV22Champ();state='podium'}else{track=championshipTracks[round];beginQual()}}else state='menu'}else if(state==='global'){if(y<H*.26){globalTab=clamp(Math.floor((x/W-.018)/.164),0,5);if(globalTab===5)fetchGlobal()}else if(globalTab===3&&y>H*.22&&y<H*.34)globalDifficulty=(globalDifficulty+1)%3;
+else if(globalTab===4&&y>H*.22&&y<H*.34){globalDifficulty=(globalDifficulty+1)%3;if(globalDifficulty===0)globalChampLength=globalChampLength===5?10:5}
+else if(y>H*.91)state='menu'}else if(state==='v22records'){if(y<H*.19)difficulty=(difficulty+1)%3;else if(y>H*.91)state='menu'}else if(state==='podium'||state==='records')state='menu'}
 cv.addEventListener('pointerdown',down);cv.addEventListener('pointermove',e=>{if(touches.has(e.pointerId)){touches.set(e.pointerId,{x:e.clientX,y:e.clientY});recalcTouches()}});for(let ev of ['pointerup','pointercancel','lostpointercapture'])cv.addEventListener(ev,e=>{touches.delete(e.pointerId);recalcTouches()});addEventListener('blur',()=>{touches.clear();clearControls()});let keyMap={ArrowLeft:'left',ArrowRight:'right',ArrowUp:'gas',ArrowDown:'brake',a:'left',d:'right',w:'gas',s:'brake',' ':'gas'};addEventListener('keydown',e=>{if(keyMap[e.key]){controls[keyMap[e.key]]=true;e.preventDefault()}});addEventListener('keyup',e=>{if(keyMap[e.key]){controls[keyMap[e.key]]=false;e.preventDefault()}});
 function frame(now){let dt=clamp((now-last)/1000,0,.05);last=now;if(state==='race'||state==='qual'){for(let i=0;i<Math.max(1,Math.ceil(dt/.016));i++)step(dt/Math.max(1,Math.ceil(dt/.016)));scene()}else if(state==='menu')menu();else if(state==='results')results();else if(state==='qualResults')qualifyingResults();else if(state==='global')globalScreen();else if(state==='records')recordsScreen();else if(state==='v22records')v22RecordScreen();else podium();requestAnimationFrame(frame)}start();state='menu';requestAnimationFrame(frame);
 </script></body></html>

@@ -52,15 +52,18 @@ function planWeather(first=false){
 function tireGrip(t,w){const dry=[1.12,1.04,.98,.79,.65],wet=[.59,.68,.73,1.06,1.13],damp=[.82,.89,.93,1.10,.96];return (w===0||w===1?dry:w===2?damp:wet)[t]}
 function pointAt(progress){let pr=mod(progress,total),k=0;while(k<segments.length-1&&cumulative[k+1]<pr)k++;let t=clamp((pr-cumulative[k])/segments[k],0,1),a=pts[k],b=pts[(k+1)%pts.length],vx=(b[0]-a[0])/segments[k],vy=(b[1]-a[1])/segments[k];return {x:a[0]+(b[0]-a[0])*t,y:a[1]+(b[1]-a[1])*t,nx:-vy,ny:vx,angle:Math.atan2(vy,vx)}}
 function createPit(){
- // Long, tangent-aligned pit entry and exit: no perpendicular junctions.
- pitPoints=[];let entry=-720,exit=820,step=8;
- const smoothstep=t=>{t=clamp(t,0,1);return t*t*(3-2*t)};
+ // Pit lane follows the RIGHT edge of the start/finish straight.
+ // Both junctions are longitudinal, without crossing the racing line.
+ pitPoints=[];let entry=-525,exit=525,step=5;
+ const ease=t=>{t=clamp(t,0,1);return t*t*(3-2*t)};
  for(let d=entry;d<=exit;d+=step){
-  let p=pointAt(d),inward=smoothstep((d-entry)/310),outward=smoothstep((exit-d)/340);
-  let offset=roadWidth*(.08+1.18*inward*outward);
+  let p=pointAt(d);
+  // nx points left of the racing direction: negative = right edge.
+  let blend=ease((d-entry)/165)*ease((exit-d)/175);
+  let offset=-roadWidth*(.38+.72*blend);
   pitPoints.push({x:p.x+p.nx*offset,y:p.y+p.ny*offset,progress:d});
  }
- pitLane={entry,exit,step,speed:72,stops:[-235,-110,15,140,265]};
+ pitLane={entry,exit,step,speed:72,stops:[-230,-115,0,115,230]};
 }
 function pitLocation(d){let k=clamp((d-pitLane.entry)/pitLane.step,0,pitPoints.length-1),i=Math.min(pitPoints.length-2,Math.floor(k)),t=k-i,a=pitPoints[i],b=pitPoints[i+1];return {x:a.x+(b.x-a.x)*t,y:a.y+(b.y-a.y)*t,angle:Math.atan2(b.y-a.y,b.x-a.x)}}
 function pitTasks(c,i){if(i===0)return {...pitPlan};return {fuel:c.fuel<45,tires:c.tireWear>48||(weather>=2&&c.tire<3)||(weather<2&&c.tire>=3),repair:c.damage>28}}
@@ -123,17 +126,12 @@ function crossedGate(c,oldX,oldY){
  return false;
 }
 function updateRaceDistance(c){
- const loc=locate(c.x,c.y),previous=c.lastTrackProgress??loc.progress;
- let delta=loc.progress-previous;
- if(delta>total/2)delta-=total;
- if(delta< -total/2)delta+=total;
- // Le classement utilise la progression physique continue, indépendamment des portiques.
- // Une projection aberrante dans un virage serré ne peut pas offrir un tour gratuit.
- const maxDelta=Math.max(28,Math.abs(c.speed||0)*.09+25);
- if(Math.abs(delta)<=maxDelta)c.odometer=(c.odometer||0)+delta;
- c.lastTrackProgress=loc.progress;
- c.raceDistance=c.odometer||0;
+ const loc=locate(c.x,c.y);
  c.progress=loc.progress;
+ // Never derive completed laps from a noisy nearest-point odometer.
+ // Only the physical start/finish gate increments c.lap.
+ c.raceDistance=c.lap*total+loc.progress;
+ c.lastTrackProgress=loc.progress;
 }
 function start(mode='race'){session=mode;let def=tracks[track];roadWidth=Math.max(168,def[2]*1.55);let shape=def[1].map(p=>[p[0]*1.32,p[1]*1.32]);shape[0]=[0,0];shape[1]=[620,0];shape[shape.length-1]=[-620,0];pts=smooth(shape,2);segments=[];cumulative=[];total=0;for(let i=0;i<pts.length;i++){cumulative.push(total);let a=pts[i],b=pts[(i+1)%pts.length],len=hypot(b[0]-a[0],b[1]-a[1]);segments.push(len);total+=len}createPit();buildGates();let a=pts[0],b=pts[1],dx=(b[0]-a[0])/segments[0],dy=(b[1]-a[1])/segments[0];cars=[];for(let i=0;i<10;i++){let slot=mode==='race'?gridOrder.indexOf(i):i;let row=Math.floor(slot/2),side=slot%2===0?-1:1;let offset=mode==='qual'&&i===0?0:42+row*75+(slot%2)*20;let lateral=mode==='qual'&&i===0?0:side*roadWidth*.25;
  // Position on the actual spline: the track bends before the fifth row.
@@ -176,7 +174,10 @@ function award(){if(awarded)return;awarded=true;publishResult();if(champ){let ra
 function step(dt){if(state!=='race'&&state!=='qual')return;if(pitPanel&&state==='race')return;countdown-=dt;if(countdown>0)return;elapsed+=dt;if(state==='qual'&&qualStart===0)qualStart=elapsed;weatherTimer+=dt;weatherAlert=Math.max(0,weatherAlert-dt);if(state==='race'&&weatherWillChange&&weatherTimer>=weatherChangeAt){weather=forecast;weatherAlert=7;planWeather(false)}for(let c of cars){c.boost=Math.max(0,c.boost-dt);c.shield=Math.max(0,c.shield-dt);c.trap=Math.max(0,c.trap-dt);c.collisionGrace=Math.max(0,c.collisionGrace-dt);c.bumpX=(c.bumpX||0)*Math.exp(-4*dt);c.bumpY=(c.bumpY||0)*Math.exp(-4*dt);c.hitCooldown=Math.max(0,(c.hitCooldown||0)-dt);c.pitCooldown=Math.max(0,c.pitCooldown-dt)}oilTraps=oilTraps.filter(o=>(o.life-=dt)>0);for(let p of pickups){if(p.respawn>0){p.respawn=Math.max(0,p.respawn-dt);if(p.respawn===0){let next=randomBonusPosition(p);if(next){p.x=next.x;p.y=next.y}else p.respawn=1}}}skids=skids.filter(s=>(s.t-=dt)>0);particles=particles.filter(p=>(p.life-=dt)>0);for(let p of particles){p.x+=p.vx*dt;p.y+=p.vy*dt;p.vx*=Math.exp(-3*dt);p.vy*=Math.exp(-3*dt)}
 for(let i=0;i<10;i++){let c=cars[i];if(c.done)continue;let at=locate(c.x,c.y),steer=0,gas=1,maxSpeed=265;
  if(state==='race'&&!c.inPit&&c.requestedPit&&c.pitCooldown<=0&&c.lap>=0&&at.progress>total+pitLane.entry-45&&at.progress<total+pitLane.entry+45){c.inPit=true;c.pitProgress=pitLane.entry;c.pitServiced=false;c.speed=Math.min(c.speed,pitLane.speed)}
- if(c.inPit){let before=c.pitProgress;pitDrive(c,i,dt);if(c.pitProgress>before&&before<0&&c.pitProgress>=0&&c.nextGate===0){c.gatesPassed++;c.nextGate=1;c.lap++;let t=elapsed-c.lapStarted;if(c.lapStarted>0&&t>2){c.lastLapTime=t;if(i===0){lastLap=t;bestLap=Math.min(bestLap,t)}}c.lapStarted=elapsed;if(c.lap>=laps){c.done=true;c.finish=elapsed}}c.raceDistance=c.odometer||0;continue}
+ if(c.inPit){let before=c.pitProgress;pitDrive(c,i,dt);if(c.pitProgress>before&&before<0&&c.pitProgress>=0&&c.nextGate===0){c.gatesPassed++;c.nextGate=1;c.lap++;let t=elapsed-c.lapStarted;if(c.lapStarted>0&&t>2){c.lastLapTime=t;if(i===0){lastLap=t;bestLap=Math.min(bestLap,t)}}c.lapStarted=elapsed;if(c.lap>=laps){c.done=true;c.finish=elapsed}}// The pit lane crosses the same timing line as the track.
+ // Before crossing: lap N, distance N*total + (total + negative pitProgress).
+ // After crossing: lap N+1, distance (N+1)*total + positive pitProgress.
+ c.raceDistance=c.lap*total+mod(c.pitProgress,total);continue}
  if(i===0){steer=Number(controls.right)-Number(controls.left);gas=Number(controls.gas)}else{
  // AI V6: anticipates corners, picks a lateral lane, and changes lanes to overtake.
  let aheadProgress=mod(at.progress+Math.max(75,c.speed*.48),total);
@@ -269,7 +270,7 @@ let a=pts[0],b=pts[1],dx=(b[0]-a[0])/segments[0],dy=(b[1]-a[1])/segments[0];for(
  if(weather>=2){g.save();g.globalAlpha=weather===3?.16:.07;g.fillStyle='#80a8d1';g.fillRect(0,0,W,H);g.restore();g.strokeStyle='#c5e3ff55';g.lineWidth=1;for(let j=0;j<(weather===3?75:30);j++){let xx=(j*137+elapsed*110)%W,yy=(j*89+elapsed*240)%H;g.beginPath();g.moveTo(xx,yy);g.lineTo(xx-7,yy+13);g.stroke()}}
  for(let o of oilTraps){let [x,y]=world(o.x,o.y);g.save();g.globalAlpha=Math.min(.88,o.life*2);g.fillStyle='#090d15';g.beginPath();g.ellipse(x,y,23*scale,15*scale,-.25,0,Math.PI*2);g.fill();g.strokeStyle='#7d91b0';g.lineWidth=Math.max(1,scale);g.beginPath();g.ellipse(x-4*scale,y-3*scale,10*scale,4*scale,-.3,0,Math.PI);g.stroke();g.restore()}for(let s of skids){let [x,y]=world(s.x,s.y);g.fillStyle='#17191f88';g.beginPath();g.arc(x,y,3*scale,0,7);g.fill()}for(let o of obstacles){let [x,y]=world(o.x,o.y);if(o.kind==='oil'){g.fillStyle='#10141e';g.beginPath();g.ellipse(x,y,18*scale,11*scale,0,0,7);g.fill()}else{g.fillStyle='#ff841d';g.beginPath();g.arc(x,y,12*scale,0,7);g.fill();g.fillStyle='white';g.beginPath();g.arc(x,y,5*scale,0,7);g.fill()}}for(let p of pickups){if(p.respawn>0)continue;let [x,y]=world(p.x,p.y),color={turbo:'#ffda37',shield:'#56dfff',trap:'#ee66de'}[p.kind];g.fillStyle='#121b2b';g.beginPath();g.arc(x,y,14*scale,0,7);g.fill();g.strokeStyle=color;g.lineWidth=3;g.stroke();label({turbo:'T',shield:'B',trap:'P'}[p.kind],x,y,Math.max(10,15*scale),color)}cars.forEach((c,i)=>{if(!c.done)drawCar(c,i,world,scale)});for(let p of particles){let [x,y]=world(p.x,p.y);g.globalAlpha=Math.min(1,p.life*2);g.fillStyle=p.color;g.beginPath();g.arc(x,y,p.r*scale,0,Math.PI*2);g.fill()}g.globalAlpha=1;
 let top=Math.max(78,H*.16);g.fillStyle='#0d1424f2';g.fillRect(0,0,W,top);
- label('MINI RACING WEB V19',W*.5,top*.16,Math.min(20,H*.040),'#ffdb62');
+ label('MINI RACING WEB V20',W*.5,top*.16,Math.min(20,H*.040),'#ffdb62');
  label(state==='qual'?`QUALIF ${Math.min(qualTimes.length+1,qualLaps)}/${qualLaps}`:`TOUR ${clamp(cars[0].lap+1,1,laps)}/${laps}`,W*.12,top*.55,Math.min(18,H*.037));
  label(state==='qual'?`MEILLEUR ${qualTimes.length?Math.min(...qualTimes).toFixed(2)+'s':'--'}`:`P${cars[0].rank}/10`,W*.35,top*.55,Math.min(18,H*.037),'#ffdc5b');
  label('TOTAL '+formatTime(elapsed),W*.70,top*.42,Math.min(16,H*.032));
@@ -302,7 +303,7 @@ function drawTimingTower(top){
  let y=top+9,leader=cars[sorted[0]],leaderDist=leader.raceDistance||0;
  rounded(x-5,y-5,w+7,rowH*10+13,8,'#0b1220dc','#51647c');
  sorted.forEach((id,pos)=>{let c=cars[id],dist=c.raceDistance||0;
- let gap=leaderDist-dist,txt=c.inPit?(c.pitTime>0?'ARRET STAND':'STANDS'):c.requestedPit?'PIT PREVU':pos===0?'LEADER':c.done&&leader.done?'+'+(c.finish-leader.finish).toFixed(1)+'s':gap>=total?'+'+Math.floor(gap/total)+' tour(s)':'+'+(Math.max(0,gap)/Math.max(90,leader.speed||200)).toFixed(1)+'s';
+ let gap=Math.max(0,leaderDist-dist),txt=c.inPit?(c.pitTime>0?'ARRET STAND':'STANDS'):c.requestedPit?'PIT PREVU':pos===0?'LEADER':c.done&&leader.done?'+'+(c.finish-leader.finish).toFixed(1)+'s':gap>=total?'+'+Math.floor(gap/total)+' tour(s)':'+'+(Math.max(0,gap)/Math.max(90,leader.speed||200)).toFixed(1)+'s';
  let yy=y+rowH*(pos+.5);if(id===0)rounded(x-2,y+rowH*pos-1,w+2,rowH,3,'#295b50');
  g.fillStyle=driverColor(id);g.fillRect(x+3,yy-5,4,10);
  g.fillStyle=tireColors[c.tire];g.beginPath();g.arc(x+13,yy,Math.max(3,rowH*.20),0,Math.PI*2);g.fill();

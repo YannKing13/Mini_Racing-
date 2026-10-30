@@ -1,0 +1,6 @@
+MINI RACING V22.5
+Remplacer le fichier index.html à la racine du dépôt GitHub Pages.
+Conserve l'API Cloudflare et les records existants.
+Attention : sauvegarde locale V22.4 à tester avant mise à jour, conserver une copie de l'ancien index.html.
+Nouveautés : voitures de F1 vues du dessus, pluie évolutive avec radar cinq tours, piste humide/flaques, adhérence des pneus, freinage en virages, distance course et stands.
+Les simulations de physique et les tours doivent être testés sur téléphone avant usage prolongé.

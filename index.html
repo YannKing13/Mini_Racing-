@@ -1,4 +1,4 @@
-<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover"><meta name="theme-color" content="#111a2b"><title>Mini Racing Championship V22.9.5</title><style>*{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#111827;touch-action:none;font-family:Arial,sans-serif}canvas{display:block;width:100vw;height:100dvh;touch-action:none}#rotate{position:fixed;inset:0;background:#111827ed;color:white;display:none;align-items:center;justify-content:center;text-align:center;font-size:22px;padding:30px;z-index:4}@media(orientation:portrait){#rotate{display:flex}}</style></head><body><canvas id="game"></canvas><div id="rotate">↻<br>Tourne ton téléphone en paysage pour jouer</div><script>
+<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover"><meta name="theme-color" content="#111a2b"><title>Mini Racing Championship V22.9.6</title><style>*{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#111827;touch-action:none;font-family:Arial,sans-serif}canvas{display:block;width:100vw;height:100dvh;touch-action:none}#rotate{position:fixed;inset:0;background:#111827ed;color:white;display:none;align-items:center;justify-content:center;text-align:center;font-size:22px;padding:30px;z-index:4}@media(orientation:portrait){#rotate{display:flex}}</style></head><body><canvas id="game"></canvas><div id="rotate">↻<br>Tourne ton téléphone en paysage pour jouer</div><script>
 'use strict';
 const cv=document.getElementById('game'),g=cv.getContext('2d');let W=960,H=540,DPR=1;
 function resize(){DPR=Math.min(devicePixelRatio||1,2);W=innerWidth;H=innerHeight;cv.width=Math.round(W*DPR);cv.height=Math.round(H*DPR);g.setTransform(DPR,0,0,DPR,0,0)}addEventListener('resize',resize);resize();
@@ -184,14 +184,19 @@ function updateRaceDistance(c,i){
  if(i===0){
    // Le joueur garde la validation des 12 portiques.
    c.progress=loc.progress;
-   c.raceDistance=(c.lap+1)*total+loc.progress;
+   c.raceDistance=c.lap*total+loc.progress;
  }else{
    // L'IA suit une distance continue, sans erreur de tour aux intersections
    // ou lorsque la projection revient au debut du circuit.
    let previous=Number.isFinite(c.lastTrackProgress)?c.lastTrackProgress:loc.progress;
    let delta=mod(loc.progress-previous+total/2,total)-total/2;
    // Un bond de projection n'est pas un tour parcouru.
-   if(Math.abs(delta)>Math.max(35,c.speed*.12+18))delta=0;
+   if(Math.abs(delta)>Math.max(35,c.speed*.12+18)){
+     // Aux intersections la projection peut sauter : garder une progression physique
+     // plutot que bloquer indefiniment le compteur des adversaires.
+     const moved=hypot(c.x-(c.prevX??c.x),c.y-(c.prevY??c.y));
+     delta=clamp(moved,0,Math.max(0,c.speed)*.06+8);
+   }
    c.odometer=(Number.isFinite(c.odometer)?c.odometer:-(c.startOffset||0))+delta;
    c.raceDistance=c.odometer;
    const oldLap=c.lap;
@@ -439,7 +444,7 @@ for(let i=0;i<10;i++){let c=cars[i];if(c.done)continue;if(state==='race'&&(c.dam
  if(c.inPit){let before=c.pitProgress;pitDrive(c,i,dt);if(!c.pitLapCredited&&before<0&&c.pitProgress>=0){c.pitLapCredited=true;c.gatesPassed=(Math.floor((c.gatesPassed||0)/12)+1)*12+1;c.nextGate=1;c.lap++;let t=elapsed-c.lapStarted;if(c.lapStarted>0&&t>2){c.lastLapTime=t;if(i===0){lastLap=t;bestLap=Math.min(bestLap,t)}}c.lapStarted=elapsed;if(c.lap>=laps){c.done=true;c.finish=elapsed}}// The pit lane crosses the same timing line as the track.
  // Before crossing: lap N, distance N*total + (total + negative pitProgress).
  // After crossing: lap N+1, distance (N+1)*total + positive pitProgress.
- c.raceDistance=(c.lap+1)*total+c.pitProgress;if(i>0){c.odometer=c.raceDistance;c.lastTrackProgress=locate(c.x,c.y).progress;}continue}
+ c.raceDistance=(c.lap+(c.pitLapCredited?0:1))*total+c.pitProgress;if(i>0){c.odometer=c.raceDistance;c.lastTrackProgress=locate(c.x,c.y).progress;}continue}
  if(i===0){steer=Number(controls.right)-Number(controls.left);gas=Number(controls.gas);c.steerSmooth=(c.steerSmooth||0)+(steer-(c.steerSmooth||0))*Math.min(1,dt*7);steer=c.steerSmooth}else{
  // AI V6: anticipates corners, picks a lateral lane, and changes lanes to overtake.
  let aheadProgress=mod(at.progress+Math.max(58,c.speed*.34),total);
@@ -560,7 +565,7 @@ let a=pts[0],b=pts[1],dx=(b[0]-a[0])/segments[0],dy=(b[1]-a[1])/segments[0];for(
  if(weather>=2){g.save();g.globalAlpha=weather===3?.16:.07;g.fillStyle='#80a8d1';g.fillRect(0,0,W,H);g.restore();g.strokeStyle='#c5e3ff55';g.lineWidth=1;for(let j=0;j<(weather===3?75:30);j++){let xx=(j*137+elapsed*110)%W,yy=(j*89+elapsed*240)%H;g.beginPath();g.moveTo(xx,yy);g.lineTo(xx-7,yy+13);g.stroke()}}
  for(let o of oilTraps){let [x,y]=world(o.x,o.y);g.save();g.globalAlpha=Math.min(.88,o.life*2);g.fillStyle='#090d15';g.beginPath();g.ellipse(x,y,23*scale,15*scale,-.25,0,Math.PI*2);g.fill();g.strokeStyle='#7d91b0';g.lineWidth=Math.max(1,scale);g.beginPath();g.ellipse(x-4*scale,y-3*scale,10*scale,4*scale,-.3,0,Math.PI);g.stroke();g.restore()}for(let s of skids){let [x,y]=world(s.x,s.y);g.fillStyle='#17191f88';g.beginPath();g.arc(x,y,3*scale,0,7);g.fill()}for(let o of obstacles){let [x,y]=world(o.x,o.y);if(o.kind==='oil'){g.fillStyle='#10141e';g.beginPath();g.ellipse(x,y,18*scale,11*scale,0,0,7);g.fill()}else{g.fillStyle='#ff841d';g.beginPath();g.arc(x,y,12*scale,0,7);g.fill();g.fillStyle='white';g.beginPath();g.arc(x,y,5*scale,0,7);g.fill()}}for(let p of (state==='qual'?[]:pickups)){if(p.respawn>0)continue;let [x,y]=world(p.x,p.y),color={turbo:'#ffda37',shield:'#56dfff',trap:'#ee66de'}[p.kind];g.fillStyle='#121b2b';g.beginPath();g.arc(x,y,14*scale,0,7);g.fill();g.strokeStyle=color;g.lineWidth=3;g.stroke();label({turbo:'T',shield:'B',trap:'P'}[p.kind],x,y,Math.max(10,15*scale),color)}cars.forEach((c,i)=>{if(!c.done){if(trackWetness>.25&&c.speed>70){let [sx,sy]=world(c.x-Math.cos(c.angle)*30,c.y-Math.sin(c.angle)*30);g.save();g.globalAlpha=trackWetness*.28;g.fillStyle='#d8e8f6';g.beginPath();g.ellipse(sx,sy,Math.min(50,c.speed*.12)*scale,10*scale,c.angle,0,Math.PI*2);g.fill();g.restore()}drawCar(c,i,world,scale)}});for(let p of particles){let [x,y]=world(p.x,p.y);g.globalAlpha=Math.min(1,p.life*2);g.fillStyle=p.color;g.beginPath();g.arc(x,y,p.r*scale,0,Math.PI*2);g.fill()}g.globalAlpha=1;
 let top=Math.max(78,H*.16);g.fillStyle='#0d1424f2';g.fillRect(0,0,W,top);
- label('MINI RACING WEB V22.9.5',W*.5,top*.16,Math.min(20,H*.040),'#ffdb62');
+ label('MINI RACING WEB V22.9.6',W*.5,top*.16,Math.min(20,H*.040),'#ffdb62');
  label(state==='qual'?`QUALIF ${Math.min(qualTimes.length+1,qualLaps)}/${qualLaps}`:`TOUR ${clamp(cars[0].lap+1,1,laps)}/${laps}`,W*.12,top*.55,Math.min(18,H*.037));
  label(state==='qual'?`MEILLEUR ${qualTimes.length?Math.min(...qualTimes).toFixed(2)+'s':'--'}`:`P${cars[0].rank}/10`,W*.35,top*.55,Math.min(18,H*.037),'#ffdc5b');
  if(state==='race')label('VITESSE '+Math.round(Math.max(0,cars[0].speed))+' km/h',W*.52,top*.55,Math.min(18,H*.037),'#7ef6ff');
@@ -626,7 +631,7 @@ function hit(x,y,r){return x>=r.x&&x<=r.x+r.w&&y>=r.y&&y<=r.y+r.h}
 function menu(){
  g.fillStyle='#101b2d';g.fillRect(0,0,W,H);ui=[];
  g.fillStyle='#172b42';g.fillRect(0,H*.11,W,H*.73);
- label('MINI RACING  •  V22.9.5',W*.5,H*.055,Math.min(28,H*.060),'#ffdc5c');
+ label('MINI RACING  •  V22.9.6',W*.5,H*.055,Math.min(28,H*.060),'#ffdc5c');
  function card(text,x,y,w,h,key,color='#223a56',size=17){rounded(x,y,w,h,9,color,'#6683a0');label(text,x+w/2,y+h/2,Math.min(size,H*.034),'#edf7ff');ui.push({key,x,y,w,h})}
  card('🌍 MONDIAL',W*.02,H*.025,W*.18,H*.065,'global','#206451',14);
  card('🏆 RECORDS',W*.80,H*.025,W*.18,H*.065,'records','#3a5284',14);

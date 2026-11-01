@@ -1,4 +1,4 @@
-<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover"><meta name="theme-color" content="#111a2b"><title>Mini Racing Championship V22.9.4</title><style>*{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#111827;touch-action:none;font-family:Arial,sans-serif}canvas{display:block;width:100vw;height:100dvh;touch-action:none}#rotate{position:fixed;inset:0;background:#111827ed;color:white;display:none;align-items:center;justify-content:center;text-align:center;font-size:22px;padding:30px;z-index:4}@media(orientation:portrait){#rotate{display:flex}}</style></head><body><canvas id="game"></canvas><div id="rotate">↻<br>Tourne ton téléphone en paysage pour jouer</div><script>
+<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover"><meta name="theme-color" content="#111a2b"><title>Mini Racing Championship V22.9.5</title><style>*{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#111827;touch-action:none;font-family:Arial,sans-serif}canvas{display:block;width:100vw;height:100dvh;touch-action:none}#rotate{position:fixed;inset:0;background:#111827ed;color:white;display:none;align-items:center;justify-content:center;text-align:center;font-size:22px;padding:30px;z-index:4}@media(orientation:portrait){#rotate{display:flex}}</style></head><body><canvas id="game"></canvas><div id="rotate">↻<br>Tourne ton téléphone en paysage pour jouer</div><script>
 'use strict';
 const cv=document.getElementById('game'),g=cv.getContext('2d');let W=960,H=540,DPR=1;
 function resize(){DPR=Math.min(devicePixelRatio||1,2);W=innerWidth;H=innerHeight;cv.width=Math.round(W*DPR);cv.height=Math.round(H*DPR);g.setTransform(DPR,0,0,DPR,0,0)}addEventListener('resize',resize);resize();
@@ -238,7 +238,7 @@ function retireCar(c,i,reason){
 }
 function raceOrder(){return cars.map((c,i)=>i).sort((a,b)=>{let A=cars[a],B=cars[b];if(A.retired!==B.retired)return A.retired?1:-1;if(A.done&&B.done)return (A.finish||Infinity)-(B.finish||Infinity)||(B.raceDistance||0)-(A.raceDistance||0);if(A.done)return -1;if(B.done)return 1;return (B.raceDistance||0)-(A.raceDistance||0)})}
 function simulateRetirement(){
- for(let i=1;i<cars.length;i++){let c=cars[i];if(c.done)continue;let left=Math.max(0,laps*total-(c.raceDistance||0));c.finish=projectAIFinish(c,i);c.done=true;}
+ for(let i=1;i<cars.length;i++){let c=cars[i];if(c.done)continue;let left=Math.max(0,laps*total-(c.raceDistance||0));c.finish=projectAIFinish(c,i);c.estimatedFinish=true;c.done=true;}
  raceOrder().forEach((id,j)=>cars[id].rank=j+1);award();state='results';paused=false;checkpoint();
 }
 function projectAIFinish(c,i){
@@ -267,6 +267,7 @@ function simulateRemaining(){
     const c=cars[i];
     if(c.done||c.retired)continue;
     c.finish=projectAIFinish(c,i);
+    c.estimatedFinish=true;
     c.done=true;
     c.raceDistance=laps*total;
   }
@@ -559,15 +560,15 @@ let a=pts[0],b=pts[1],dx=(b[0]-a[0])/segments[0],dy=(b[1]-a[1])/segments[0];for(
  if(weather>=2){g.save();g.globalAlpha=weather===3?.16:.07;g.fillStyle='#80a8d1';g.fillRect(0,0,W,H);g.restore();g.strokeStyle='#c5e3ff55';g.lineWidth=1;for(let j=0;j<(weather===3?75:30);j++){let xx=(j*137+elapsed*110)%W,yy=(j*89+elapsed*240)%H;g.beginPath();g.moveTo(xx,yy);g.lineTo(xx-7,yy+13);g.stroke()}}
  for(let o of oilTraps){let [x,y]=world(o.x,o.y);g.save();g.globalAlpha=Math.min(.88,o.life*2);g.fillStyle='#090d15';g.beginPath();g.ellipse(x,y,23*scale,15*scale,-.25,0,Math.PI*2);g.fill();g.strokeStyle='#7d91b0';g.lineWidth=Math.max(1,scale);g.beginPath();g.ellipse(x-4*scale,y-3*scale,10*scale,4*scale,-.3,0,Math.PI);g.stroke();g.restore()}for(let s of skids){let [x,y]=world(s.x,s.y);g.fillStyle='#17191f88';g.beginPath();g.arc(x,y,3*scale,0,7);g.fill()}for(let o of obstacles){let [x,y]=world(o.x,o.y);if(o.kind==='oil'){g.fillStyle='#10141e';g.beginPath();g.ellipse(x,y,18*scale,11*scale,0,0,7);g.fill()}else{g.fillStyle='#ff841d';g.beginPath();g.arc(x,y,12*scale,0,7);g.fill();g.fillStyle='white';g.beginPath();g.arc(x,y,5*scale,0,7);g.fill()}}for(let p of (state==='qual'?[]:pickups)){if(p.respawn>0)continue;let [x,y]=world(p.x,p.y),color={turbo:'#ffda37',shield:'#56dfff',trap:'#ee66de'}[p.kind];g.fillStyle='#121b2b';g.beginPath();g.arc(x,y,14*scale,0,7);g.fill();g.strokeStyle=color;g.lineWidth=3;g.stroke();label({turbo:'T',shield:'B',trap:'P'}[p.kind],x,y,Math.max(10,15*scale),color)}cars.forEach((c,i)=>{if(!c.done){if(trackWetness>.25&&c.speed>70){let [sx,sy]=world(c.x-Math.cos(c.angle)*30,c.y-Math.sin(c.angle)*30);g.save();g.globalAlpha=trackWetness*.28;g.fillStyle='#d8e8f6';g.beginPath();g.ellipse(sx,sy,Math.min(50,c.speed*.12)*scale,10*scale,c.angle,0,Math.PI*2);g.fill();g.restore()}drawCar(c,i,world,scale)}});for(let p of particles){let [x,y]=world(p.x,p.y);g.globalAlpha=Math.min(1,p.life*2);g.fillStyle=p.color;g.beginPath();g.arc(x,y,p.r*scale,0,Math.PI*2);g.fill()}g.globalAlpha=1;
 let top=Math.max(78,H*.16);g.fillStyle='#0d1424f2';g.fillRect(0,0,W,top);
- label('MINI RACING WEB V22.9.4',W*.5,top*.16,Math.min(20,H*.040),'#ffdb62');
+ label('MINI RACING WEB V22.9.5',W*.5,top*.16,Math.min(20,H*.040),'#ffdb62');
  label(state==='qual'?`QUALIF ${Math.min(qualTimes.length+1,qualLaps)}/${qualLaps}`:`TOUR ${clamp(cars[0].lap+1,1,laps)}/${laps}`,W*.12,top*.55,Math.min(18,H*.037));
  label(state==='qual'?`MEILLEUR ${qualTimes.length?Math.min(...qualTimes).toFixed(2)+'s':'--'}`:`P${cars[0].rank}/10`,W*.35,top*.55,Math.min(18,H*.037),'#ffdc5b');
  if(state==='race')label('VITESSE '+Math.round(Math.max(0,cars[0].speed))+' km/h',W*.52,top*.55,Math.min(18,H*.037),'#7ef6ff');
- label('TOTAL '+formatTime(elapsed),W*.70,top*.42,Math.min(16,H*.032));
- label('TOUR '+formatTime(elapsed-(cars[0].lapStarted||0)),W*.70,top*.77,Math.min(16,H*.032),'#bcefff');
+ label('TOTAL '+formatTime(state==='race'&&cars[0].done&&Number.isFinite(cars[0].finish)?cars[0].finish:elapsed),W*.70,top*.42,Math.min(16,H*.032));
+ label('TOUR '+formatTime(state==='race'&&cars[0].done?Math.max(0,cars[0].finish-(cars[0].lapStarted||0)):elapsed-(cars[0].lapStarted||0)),W*.70,top*.77,Math.min(16,H*.032),'#bcefff');
  label(weatherNames[weather]+'  '+tireShort[cars[0].tire],W*.89,top*.80,Math.min(15,H*.029),weather>=2?'#8fcbff':'#ffe39a');
  if(lastLap>0)label('DERN. '+formatTime(lastLap),W*.36,top*.85,Math.min(13,H*.026),'#d7e4ff');
- if(champ){rounded(W*.34,top+4,W*.32,H*.044,5,'#102a3de8');label(`CHAMPIONNAT ${round+1}/${championshipLength}  |  ${scores[0]} PTS`,W*.5,top+H*.025,Math.min(14,H*.029),'#e5f0ff');}if(countdown>0)label(countdown>1?Math.ceil(countdown):'GO !',W*.5,H*.34,Math.min(52,H*.10),'#ffdb5c');if(cars[0].done)label('ARRIVEE !  PAUSE > SIMULER LA FIN',W*.5,H*.47,Math.min(17,H*.033),'#ffdc5c');if(cars[0].boost>0)label('TURBO !',W*.23,top+40,18,'#ffdf52');if(cars[0].shield>0)label('BOUCLIER',W*.23,top+40,18,'#5deaff');if(state==='race')drawTimingTower(top);if(state==='qual'){let ranked=qualificationOrder(),pole=ranked[0].time,xx=W*.77,yy=top+H*.055;rounded(xx-6,yy-8,W*.22,H*.46,8,'#0a1527e8','#6886a2');label('QUALIFS EN DIRECT',xx+W*.105,yy+H*.025,Math.min(14,H*.028),'#ffe17a');ranked.forEach((r,j)=>{let y=yy+H*(.065+j*.036);label((j+1)+' '+driverTag(r.id)+' #'+driverNumber(r.id),xx,y,Math.min(13,H*.026),r.id===0?'#78ffb5':'#eaf2ff','left');label(Number.isFinite(r.time)?r.time.toFixed(2)+'s':'--',xx+W*.20,y,Math.min(12,H*.024),'#ffde82','right')});label('DELTA SECTEUR '+(qualDelta>=0?'+':'')+qualDelta.toFixed(2)+'s',W*.49,top+H*.12,Math.min(15,H*.03),qualDelta<=0?'#8dffae':'#ff9c8e');}
+ if(champ){rounded(W*.34,top+4,W*.32,H*.044,5,'#102a3de8');label(`CHAMPIONNAT ${round+1}/${championshipLength}  |  ${scores[0]} PTS`,W*.5,top+H*.025,Math.min(14,H*.029),'#e5f0ff');}if(countdown>0)label(countdown>1?Math.ceil(countdown):'GO !',W*.5,H*.34,Math.min(52,H*.10),'#ffdb5c');if(cars[0].done)label('ARRIVEE !  TEMPS FIGE  |  PAUSE > SIMULER LA FIN',W*.5,H*.47,Math.min(17,H*.033),'#ffdc5c');if(cars[0].boost>0)label('TURBO !',W*.23,top+40,18,'#ffdf52');if(cars[0].shield>0)label('BOUCLIER',W*.23,top+40,18,'#5deaff');if(state==='race')drawTimingTower(top);if(state==='qual'){let ranked=qualificationOrder(),pole=ranked[0].time,xx=W*.77,yy=top+H*.055;rounded(xx-6,yy-8,W*.22,H*.46,8,'#0a1527e8','#6886a2');label('QUALIFS EN DIRECT',xx+W*.105,yy+H*.025,Math.min(14,H*.028),'#ffe17a');ranked.forEach((r,j)=>{let y=yy+H*(.065+j*.036);label((j+1)+' '+driverTag(r.id)+' #'+driverNumber(r.id),xx,y,Math.min(13,H*.026),r.id===0?'#78ffb5':'#eaf2ff','left');label(Number.isFinite(r.time)?r.time.toFixed(2)+'s':'--',xx+W*.20,y,Math.min(12,H*.024),'#ffde82','right')});label('DELTA SECTEUR '+(qualDelta>=0?'+':'')+qualDelta.toFixed(2)+'s',W*.49,top+H*.12,Math.min(15,H*.03),qualDelta<=0?'#8dffae':'#ff9c8e');}
  if(state==='race'){
   let c=cars[0],fuelPerLap=Math.max(.1,total/220*(.14+220*.0016)),fuelLaps=Math.floor(c.fuel/fuelPerLap),remaining=Math.max(0,laps-Math.max(0,c.lap));
   rounded(W*.32,top+H*.05,W*.38,H*.105,7,'#101b2be8');
@@ -625,7 +626,7 @@ function hit(x,y,r){return x>=r.x&&x<=r.x+r.w&&y>=r.y&&y<=r.y+r.h}
 function menu(){
  g.fillStyle='#101b2d';g.fillRect(0,0,W,H);ui=[];
  g.fillStyle='#172b42';g.fillRect(0,H*.11,W,H*.73);
- label('MINI RACING  •  V22.9.4',W*.5,H*.055,Math.min(28,H*.060),'#ffdc5c');
+ label('MINI RACING  •  V22.9.5',W*.5,H*.055,Math.min(28,H*.060),'#ffdc5c');
  function card(text,x,y,w,h,key,color='#223a56',size=17){rounded(x,y,w,h,9,color,'#6683a0');label(text,x+w/2,y+h/2,Math.min(size,H*.034),'#edf7ff');ui.push({key,x,y,w,h})}
  card('🌍 MONDIAL',W*.02,H*.025,W*.18,H*.065,'global','#206451',14);
  card('🏆 RECORDS',W*.80,H*.025,W*.18,H*.065,'records','#3a5284',14);
@@ -647,8 +648,10 @@ function menu(){
 function results(){g.fillStyle='#192338';g.fillRect(0,0,W,H);let sorted=order();
  label(champ?`MANCHE ${round+1}/${championshipLength} TERMINEE !`:'COURSE TERMINEE !',W/2,H*.085,Math.min(30,H*.064),'#ffdb58');
  sorted.forEach((id,j)=>{let c=cars[id],tm=c.done&&Number.isFinite(c.finish)&&c.finish>0?formatTime(c.finish):'NON TERMINE';
+ if(c.estimatedFinish&&tm!=='NON TERMINE')tm+=' *';
  let yy=H*(.16+j*.069);label(`${j+1}. ${driverName(id)} (${driverTag(id)} #${driverNumber(id)}) - ${driverTeam(id)}`,W*.12,yy,Math.min(18,H*.036),driverColor(id),'left');
  label(tm,W*.73,yy,Math.min(18,H*.036),'#e5f1ff');label(j<5?`+${pointsTable[j]} pts`:'',W*.91,yy,Math.min(15,H*.032),'#ffdf69')});
+ if(cars.some(c=>c.estimatedFinish))label('* TEMPS ESTIMES POUR LES PILOTES SIMULES',W*.5,H*.835,Math.min(13,H*.027),'#b9cce6');
  label(champ?'POINTS DU CHAMPIONNAT MIS A JOUR':'POINTS ATTRIBUES AUX 5 PREMIERS',W*.5,H*.875,Math.min(18,H*.037),'#ffdf69');
  label(globalStatus||'TOUCHER POUR CONTINUER',W/2,H*.95,Math.min(20,H*.04),'#70ffa1')}
 function qualifyingResults(){g.fillStyle='#192338';g.fillRect(0,0,W,H);
